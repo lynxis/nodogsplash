@@ -34,7 +34,6 @@
 #include <unistd.h>
 #include <syslog.h>
 
-#include "microhttpd.h"
 
 #include "safe.h"
 #include "debug.h"
@@ -42,7 +41,7 @@
 #include "auth.h"
 #include "firewall.h"
 #include "http.h"
-#include "microhttpd.h"
+#include "http_microhttpd.h"
 #include "client_list.h"
 #include "common.h"
 
@@ -343,7 +342,7 @@ int http_isAlphaNum(const char str[])
 
 /** The auth callback responds to a request to serve from the authdir */
 void
-http_nodogsplash_callback_auth(httpd *webserver, request *r)
+ghttp_nodogsplash_callback_auth(httpd *webserver, request *r)
 {
 	s_config *config;
 	t_client  *client;

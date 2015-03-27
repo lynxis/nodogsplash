@@ -37,7 +37,6 @@
 #include <syslog.h>
 
 #include "microhttpd.h"
-#include "http.h"
 #include "safe.h"
 #include "conf.h"
 #include "debug.h"

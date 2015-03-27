@@ -29,7 +29,7 @@
 #define _HTTP_H_
 
 #include "auth.h"
-#include "httpd.h"
+#include "microhttpd.h"
 #include "client_list.h"
 
 

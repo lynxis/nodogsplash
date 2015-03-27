@@ -36,7 +36,7 @@
 #include <signal.h>
 #include <errno.h>
 
-#include "httpd.h"
+#include "microhttpd.h"
 
 #include "common.h"
 #include "debug.h"

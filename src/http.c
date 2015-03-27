@@ -34,7 +34,7 @@
 #include <unistd.h>
 #include <syslog.h>
 
-#include "httpd.h"
+#include "microhttpd.h"
 
 #include "safe.h"
 #include "debug.h"
@@ -42,7 +42,7 @@
 #include "auth.h"
 #include "firewall.h"
 #include "http.h"
-#include "httpd.h"
+#include "microhttpd.h"
 #include "client_list.h"
 #include "common.h"
 

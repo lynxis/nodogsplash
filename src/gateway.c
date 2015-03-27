@@ -46,7 +46,7 @@
 #include <sys/un.h>
 
 #include "common.h"
-#include "httpd.h"
+#include "microhttpd.h"
 #include "safe.h"
 #include "debug.h"
 #include "conf.h"

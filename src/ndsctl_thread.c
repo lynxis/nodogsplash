@@ -41,7 +41,7 @@
 #include <errno.h>
 
 #include "common.h"
-#include "httpd.h"
+#include "microhttpd.h"
 #include "util.h"
 #include "conf.h"
 #include "debug.h"

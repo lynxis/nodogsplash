@@ -115,7 +115,7 @@ execute(const char cmd_line[], int quiet)
 		debug(LOG_ERR, "sigaction() failed to set default SIGCHLD handler: %s", strerror(errno));
 	}
 
-	pid = safe_fork();
+	pid = fork();
 
 	if (pid == 0) {    /* for the child process:         */
 

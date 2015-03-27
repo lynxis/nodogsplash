@@ -42,7 +42,7 @@
 
 
 /* From gateway.c */
-extern httpd * webserver;
+//extern httpd * webserver;
 
 void * safe_malloc (size_t size)
 {
@@ -93,23 +93,4 @@ int safe_vasprintf(char **strp, const char *fmt, va_list ap)
 		exit (1);
 	}
 	return (retval);
-}
-
-pid_t safe_fork(void)
-{
-	pid_t result;
-	result = fork();
-
-	if (result == -1) {
-		debug(LOG_CRIT, "Failed to fork: %s.  Bailing out", strerror(errno));
-		exit (1);
-	} else if (result == 0) {
-		/* I'm the child - do some cleanup */
-		if (webserver) {
-			close(webserver->serverSock);
-			webserver = NULL;
-		}
-	}
-
-	return result;
 }

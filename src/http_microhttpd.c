@@ -5,12 +5,26 @@
 #include <string.h>
 
 #include "client_list.h"
-#include "http_microhttpd.h"
 #include "conf.h"
 #include "debug.h"
+#include "firewall.h"
+#include "auth.h"
+#include "http_microhttpd.h"
+#include "safe.h"
 
-static t_client *add_client(struct MHD_Connection *connection);
+static t_client *add_client(const char *ip_addr);
+static int preauthenticated(struct MHD_Connection *connection, const char *ip_addr, const char *mac, const char *url, t_client *client);
+static int authenticated(struct MHD_Connection *connection, const char *ip_addr, const char *mac, const char *url, t_client *client);
+static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
+static int serve_file(struct MHD_Connection *connection, t_client *client);
+static int show_splashpage(struct MHD_Connection *connection, t_client *client);
+static int show_redirect(struct MHD_Connection *connection, t_client *client, const char *host, const char *url);
+static int need_a_redirect(struct MHD_Connection *connection, const char *host);
 
+static int need_a_redirect(struct MHD_Connection *connection, const char *host) {
+  if (host)
+    return 1;
+}
 
 /**
  * @brief get_ip
@@ -37,7 +51,7 @@ get_ip(struct MHD_Connection *connection) {
   switch(client_addr->sa_family) {
   case AF_INET:
     ip_addr = calloc(1, INET_ADDRSTRLEN+1);
-    if(!inet_ntop(addrin->sin_family, &(addrin->sin_addr), ip_addr , sizeof(struct sockaddr_in6))) {
+    if(!inet_ntop(addrin->sin_family, &(addrin->sin_addr), ip_addr , sizeof(struct sockaddr_in))) {
       free(ip_addr);
       return NULL;
     }
@@ -66,9 +80,12 @@ libmicrohttpd_cb(void *cls,
   struct MHD_Response *response;
   s_config *config;
   t_client *client;
+  char *ip_addr;
+  char *mac;
+  int ret;
 
   /* only allow get */
-  if (0 != strcmp (method, "GET"))
+  if(0 != strcmp(method, "GET"))
     return send_error(connection, 503);
 
   /* switch between preauth, authenticated */
@@ -78,9 +95,94 @@ libmicrohttpd_cb(void *cls,
    * should all requests redirected? even those to .css, .js, ... or respond with 404/503/...
    */
 
-  config = config_get_config();
 
-  client = add_client(connection);
+  /* check if we need to redirect this client */
+  config = config_get_config();
+  ip_addr = get_ip(connection);
+  mac = arp_get(ip_addr);
+
+  client = client_list_find(ip_addr, mac);
+  if(client) {
+    if(client->fw_connection_state == FW_MARK_AUTHENTICATED ||
+         client->fw_connection_state == FW_MARK_TRUSTED)
+      {
+      /* client already authed */
+        ret = authenticated(connection, ip_addr, mac, url, client);
+        free(mac);
+        free(ip_addr);
+        return ret;
+      }
+  }
+  ret = preauthenticated(connection, ip_addr, mac, url, client);
+  free(mac);
+  free(ip_addr);
+  return ret;
+}
+
+/**
+ * @brief authenticated - client already authed
+ * @param connection
+ * @param ip_addr - needs to be freed
+ * @param mac - needs to be freed
+ * @return
+ */
+static int authenticated(struct MHD_Connection *connection,
+                         const char *ip_addr,
+                         const char *mac,
+                         const char *url,
+                         t_client *client) {
+  auth_client_action(ip_addr, mac, AUTH_MAKE_AUTHENTICATED);
+  return send_redirect_temp(connection, "http://www.google.com");
+}
+
+/**
+ * @brief preauthenticated - called when a client is in this state.
+ * @param connection
+ * @param ip_addr - needs to be freed
+ * @param mac - needs to be freed
+ * @return
+ */
+static int preauthenticated(struct MHD_Connection *connection,
+                            const char *ip_addr,
+                            const char *mac,
+                            const char *url,
+                            t_client *client) {
+  struct MHD_Response *response;
+  s_config *config;
+  char *host = NULL;
+  char *query = "";
+
+  if (!client) {
+    client = add_client(ip_addr);
+    if (!client)
+      return send_error(connection, 503);
+  }
+
+  MHD_get_connection_values(connection, MHD_HEADER_KIND, get_host_value_callback, &host);
+
+  if(!strncmp(url, "/accept", strlen("/accept"))) {
+    return authenticated(connection, ip_addr, mac, url, client);
+  }
+  /* we check here if we have to serve this request or we redirect it. */
+  if(host == NULL || need_a_redirect(connection, host))
+    return show_splashpage(connection, client);
+  else
+    return show_redirect(connection, client, host, url);
+}
+
+static int show_redirect(struct MHD_Connection *connection, t_client *client, const char *host, const char *url) {
+  char *redirecturl;
+  char *query = "?";
+  int ret;
+
+  if (config_get_config()->redirectURL)
+    redirecturl = safe_strdup(config_get_config()->redirectURL);
+  else
+    safe_asprintf(&redirecturl, "http://%s%s%s%s", host, url, query);
+
+  ret = send_redirect_temp(connection, redirecturl);
+  free(redirecturl);
+  return ret;
 }
 
 /**
@@ -91,19 +193,31 @@ libmicrohttpd_cb(void *cls,
  *  their information available on the client list.
  */
 static t_client *
-add_client(struct MHD_Connection *connection)
+add_client(const char *ip_addr)
 {
   t_client	*client;
-  char *ip_addr;
-  ip_addr = get_ip(connection);
-  if(!ip_addr) {
-    return NULL;
-  }
 
   LOCK_CLIENT_LIST();
   client = client_list_add_client(ip_addr);
   UNLOCK_CLIENT_LIST();
   return client;
+}
+
+int send_redirect_temp(struct MHD_Connection *connection, const char *url) {
+  struct MHD_Response *response;
+  int ret;
+  char *redirect;
+
+  const char *redirect_body = "<html><head></head><body><a href='%s'>Click here to continue to<br>%s</a></body></html>";
+  safe_asprintf(&redirect, redirect_body, url);
+
+  response = MHD_create_response_from_data(strlen(redirect), redirect, MHD_YES, MHD_NO);
+  MHD_add_response_header(response, "Location", url);
+  ret = MHD_queue_response(connection, MHD_HTTP_TEMPORARY_REDIRECT, response);
+
+  MHD_destroy_response(response);
+
+  return ret;
 }
 
 int send_error(struct MHD_Connection *connection, int error)
@@ -148,4 +262,59 @@ int send_error(struct MHD_Connection *connection, int error)
 
   MHD_destroy_response(response);
   return ret;
+}
+
+/**
+ * @brief get_host_value_callback safe Host into cls which is a char**
+ * @param cls - a char ** pointer to our target buffer. This buffer will be alloc in this function.
+ * @param kind - see doc of  MHD_KeyValueIterator's
+ * @param key
+ * @param value
+ * @return MHD_YES or MHD_NO. MHD_NO means we found our item and this callback will not called again.
+ */
+static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
+  char **host = (char **)cls;
+  if (MHD_HEADER_KIND != kind) {
+    *host = NULL;
+    return MHD_NO;
+  }
+
+  if (key == "Host") {
+    *host = safe_strdup(value);
+    return MHD_NO;
+  }
+
+  return MHD_YES;
+}
+/**
+ * @brief show_splashpage will be called when the client clicked on Ok as well when the client haven't know us yet.
+ * @param connection
+ * @param client
+ * @return
+ */
+static int show_splashpage(struct MHD_Connection *connection, t_client *client) {
+  const char *testsplash = "<html><body><h1>juhuuuu</h1></body></html>";
+  struct MHD_Response *response;
+  int ret;
+
+  response = MHD_create_response_from_buffer(strlen(testsplash), (void *)testsplash, MHD_RESPMEM_PERSISTENT);
+  ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+  return ret;
+
+  /* generate splashpage from template */
+  /* send it to client */
+}
+
+/**
+ * @brief general_file_handler try to serve a request via filesystem
+ * @param connection
+ * @param client
+ * @return
+ */
+static int serve_file(struct MHD_Connection *connection, t_client *client) {
+  s_config *config = config_get_config();
+  // config->pagesdir
+  /* check if file exists */
+  /* match file against mime type */
+  /* serve the file */
 }

@@ -230,8 +230,7 @@ serve_splash:
 /** The multipurpose authentication action handler
  */
 void
-http_nodogsplash_callback_action(request *r,
-								 t_auth_target *authtarget,
+http_nodogsplash_callback_action(request *r, t_auth_target *authtarget,
 								 t_authaction action)
 {
 	t_client	*client;
@@ -638,21 +637,6 @@ http_nodogsplash_decode_authtarget(request *r)
 	return authtarget;
 }
 
-/* Allocate and return a pointer to a string that is the redirect URL.
- * Caller must free.
- */
-const char*
-http_nodogsplash_make_redir(const char origurl[])
-{
-	s_config *config;
-	config = config_get_config();
-
-	if(config->redirectURL) {
-		debug(LOG_DEBUG,"Redirect request , substituting %s", origurl);
-		return config->redirectURL;
-	}
-	return origurl;
-}
 
 /**
  * Allocate and return a pointer to a t_auth_target struct encoding information

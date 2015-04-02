@@ -224,7 +224,7 @@ serve_splash:
 		http_nodogsplash_serve_splash(r,authtarget, client, NULL);
 	}
 
-	http_nodogsplash_free_authtarget(authtarget);
+	free_authtarget(authtarget);
 }
 
 /** The multipurpose authentication action handler
@@ -396,7 +396,7 @@ serve_splash:
 		free(data);
 	}
 
-	http_nodogsplash_free_authtarget(authtarget);
+	free_authtarget(authtarget);
 }
 
 /** The deny callback responds to a request to serve from the denydir */
@@ -408,7 +408,7 @@ http_nodogsplash_callback_deny(httpd *webserver, request *r)
 	/* Get info we need from request, and do action */
 	authtarget = http_nodogsplash_decode_authtarget(r);
 	http_nodogsplash_callback_action (r,authtarget,AUTH_MAKE_DEAUTHENTICATED );
-	http_nodogsplash_free_authtarget(authtarget);
+	free_authtarget(authtarget);
 }
 
 /**
@@ -591,7 +591,7 @@ http_nodogsplash_redirect(request *r, const char url[])
  * Allocate and return a pointer to a t_auth_target struct
  * encoding information needed to authenticate a client.
  * See http_nodogsplash_make_authtarget().
- * The struct should be freed by http_nodogsplash_free_authtarget().
+ * The struct should be freed by free_authtarget().
  */
 t_auth_target *
 http_nodogsplash_decode_authtarget(request *r)
@@ -641,7 +641,7 @@ http_nodogsplash_decode_authtarget(request *r)
 /**
  * Allocate and return a pointer to a t_auth_target struct encoding information
  * needed to eventually authenticate a client.
- * The struct should be freed by http_nodogsplash_free_authtarget().
+ * The struct should be freed by free_authtarget().
  */
 t_auth_target*
 http_nodogsplash_make_authtarget(const char token[], const char redir[])
@@ -676,23 +676,6 @@ http_nodogsplash_make_authtarget(const char token[], const char redir[])
 	return authtarget;
 }
 
-void
-http_nodogsplash_free_authtarget(t_auth_target* authtarget)
-{
-	if(authtarget->ip) free(authtarget->ip);
-	if(authtarget->authdir) free(authtarget->authdir);
-	if(authtarget->denydir) free(authtarget->denydir);
-	if(authtarget->authaction) free(authtarget->authaction);
-	if(authtarget->denyaction) free(authtarget->denyaction);
-	if(authtarget->authtarget) free(authtarget->authtarget);
-	if(authtarget->token) free(authtarget->token);
-	if(authtarget->redir) free(authtarget->redir);
-	if(authtarget->voucher) free(authtarget->voucher);
-	if(authtarget->username) free(authtarget->username);
-	if(authtarget->password) free(authtarget->password);
-	if(authtarget->info) free(authtarget->info);
-	free(authtarget);
-}
 
 /** Perform username/password check if configured to use it.
  */

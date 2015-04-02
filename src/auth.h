@@ -60,4 +60,7 @@ typedef struct _auth_target_t {
   char *info;			/**< @brief Auxilliary info */
 } t_auth_target;
 
+/* free allocated space of authtarget */
+void free_authtarget(t_auth_target* authtarget);
+
 #endif

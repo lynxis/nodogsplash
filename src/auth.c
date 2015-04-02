@@ -132,3 +132,20 @@ auth_client_action(const char ip[], const char mac[], t_authaction action)
 	UNLOCK_CLIENT_LIST();
 	return;
 }
+
+void free_authtarget(t_auth_target* authtarget)
+{
+  if(authtarget->ip) free(authtarget->ip);
+  if(authtarget->authdir) free(authtarget->authdir);
+  if(authtarget->denydir) free(authtarget->denydir);
+  if(authtarget->authaction) free(authtarget->authaction);
+  if(authtarget->denyaction) free(authtarget->denyaction);
+  if(authtarget->authtarget) free(authtarget->authtarget);
+  if(authtarget->token) free(authtarget->token);
+  if(authtarget->redir) free(authtarget->redir);
+  if(authtarget->voucher) free(authtarget->voucher);
+  if(authtarget->username) free(authtarget->username);
+  if(authtarget->password) free(authtarget->password);
+  if(authtarget->info) free(authtarget->info);
+  free(authtarget);
+}

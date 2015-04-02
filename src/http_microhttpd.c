@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "client_list.h"
 #include "conf.h"
@@ -19,11 +20,15 @@ static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const cha
 static int serve_file(struct MHD_Connection *connection, t_client *client);
 static int show_splashpage(struct MHD_Connection *connection, t_client *client);
 static int show_redirect(struct MHD_Connection *connection, t_client *client, const char *host, const char *url);
+static int send_error(struct MHD_Connection *connection, int error);
+static int send_redirect_temp(struct MHD_Connection *connection, const char *url);
 static int need_a_redirect(struct MHD_Connection *connection, const char *host);
+
 
 static int need_a_redirect(struct MHD_Connection *connection, const char *host) {
   if (host)
     return 1;
+  return 1;
 }
 
 /**
@@ -35,7 +40,6 @@ static char *
 get_ip(struct MHD_Connection *connection) {
   const union MHD_ConnectionInfo *connection_info;
   char *ip_addr = NULL;
-  int size;
   const struct sockaddr *client_addr;
   const struct sockaddr_in  *addrin;
   const struct sockaddr_in6 *addrin6;
@@ -77,8 +81,6 @@ libmicrohttpd_cb(void *cls,
                   const char *version,
                   const char *upload_data, size_t *upload_data_size, void **ptr) {
 
-  struct MHD_Response *response;
-  s_config *config;
   t_client *client;
   char *ip_addr;
   char *mac;
@@ -97,7 +99,6 @@ libmicrohttpd_cb(void *cls,
 
 
   /* check if we need to redirect this client */
-  config = config_get_config();
   ip_addr = get_ip(connection);
   mac = arp_get(ip_addr);
 
@@ -147,10 +148,7 @@ static int preauthenticated(struct MHD_Connection *connection,
                             const char *mac,
                             const char *url,
                             t_client *client) {
-  struct MHD_Response *response;
-  s_config *config;
   char *host = NULL;
-  char *query = "";
 
   if (!client) {
     client = add_client(ip_addr);
@@ -222,7 +220,7 @@ int send_redirect_temp(struct MHD_Connection *connection, const char *url) {
 
 int send_error(struct MHD_Connection *connection, int error)
 {
-  struct MHD_Response *response;
+  struct MHD_Response *response = NULL;
   // cannot automate since cannot translate automagically between error number and MHD's status codes -- and cannot rely on MHD_HTTP_ values to provide an upper bound for an array
   const char *page_400 = "<html><head><title>Error 400</title></head><body><h1>Error 400 - Bad Request</h1></body></html>";
   const char *page_403 = "<html><head><title>Error 403</title></head><body><h1>Error 403 - Forbidden</h1></body></html>";
@@ -260,7 +258,8 @@ int send_error(struct MHD_Connection *connection, int error)
     break;
   }
 
-  MHD_destroy_response(response);
+  if (response)
+    MHD_destroy_response(response);
   return ret;
 }
 
@@ -279,7 +278,7 @@ static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const cha
     return MHD_NO;
   }
 
-  if (key == "Host") {
+  if (strncmp("Host", key, strlen("Host"))) {
     *host = safe_strdup(value);
     return MHD_NO;
   }
@@ -317,4 +316,5 @@ static int serve_file(struct MHD_Connection *connection, t_client *client) {
   /* check if file exists */
   /* match file against mime type */
   /* serve the file */
+  return MHD_NO;
 }

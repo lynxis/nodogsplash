@@ -41,26 +41,4 @@ void auth_client_action(const char ip[], const char mac[], t_authaction action);
 /** @brief Periodically check if connections expired */
 void *thread_client_timeout_check(void *arg);
 
-/**
- * Define parts of an authentication target.
- */
-typedef struct _auth_target_t {
-  char *ip;			/**< @brief IP of auth server */
-  int port;			/**< @brief Port of auth server */
-  char *authdir;		/**< @brief Auth dir */
-  char *denydir;		/**< @brief Deny dir */
-  char *authaction;		/**< @brief Auth action */
-  char *denyaction;		/**< @brief Deny action */
-  char *authtarget;		/**< @brief Deny action */
-  char *token;			/**< @brief Client token */
-  char *redir;			/**< @brief Client redirect target */
-  char *voucher;    /**< @brief voucher token */
-  char *username;		/**< @brief User name */
-  char *password;		/**< @brief User password */
-  char *info;			/**< @brief Auxilliary info */
-} t_auth_target;
-
-/* free allocated space of authtarget */
-void free_authtarget(t_auth_target* authtarget);
-
 #endif

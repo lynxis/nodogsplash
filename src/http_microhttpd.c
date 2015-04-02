@@ -2,6 +2,7 @@
 #include <syslog.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "client_list.h"
 #include "http_microhttpd.h"
@@ -9,6 +10,50 @@
 #include "debug.h"
 
 static t_client *add_client(struct MHD_Connection *connection);
+
+
+/**
+ * @brief get_ip
+ * @param connection
+ * @return ip address - must be freed by caller
+ */
+static char *
+get_ip(struct MHD_Connection *connection) {
+  const union MHD_ConnectionInfo *connection_info;
+  char *ip_addr = NULL;
+  int size;
+  const struct sockaddr *client_addr;
+  const struct sockaddr_in  *addrin;
+  const struct sockaddr_in6 *addrin6;
+  if (!(connection_info = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS))) {
+    return NULL;
+  }
+
+  /* cast required for legacy MHD API < 0.9.6*/
+  client_addr = (const struct sockaddr *)connection_info->client_addr;
+  addrin = (const struct sockaddr_in *) client_addr;
+  addrin6 = (const struct sockaddr_in6 *) client_addr;
+
+  switch(client_addr->sa_family) {
+  case AF_INET:
+    ip_addr = calloc(1, INET_ADDRSTRLEN+1);
+    if(!inet_ntop(addrin->sin_family, &(addrin->sin_addr), ip_addr , sizeof(struct sockaddr_in6))) {
+      free(ip_addr);
+      return NULL;
+    }
+    break;
+
+  case AF_INET6:
+    ip_addr = calloc(1, INET6_ADDRSTRLEN+1);
+    if(!inet_ntop(addrin6->sin6_family, &(addrin6->sin6_addr), ip_addr , sizeof(struct sockaddr_in6))){
+      free(ip_addr);
+      return NULL;
+    }
+    break;
+  }
+
+  return ip_addr;
+}
 
 int
 libmicrohttpd_cb(void *cls,
@@ -49,35 +94,11 @@ static t_client *
 add_client(struct MHD_Connection *connection)
 {
   t_client	*client;
-  const union MHD_ConnectionInfo *connection_info;
   char *ip_addr;
-  int size;
-  const struct sockaddr *client_addr;
-  const struct sockaddr_in  *addrin;
-  const struct sockaddr_in6 *addrin6;
-  if (!(connection_info = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS))) {
+  ip_addr = get_ip(connection);
+  if(!ip_addr) {
     return NULL;
   }
-
-  /* cast required for legacy MHD API < 0.9.6*/
-  client_addr = (const struct sockaddr *)connection_info->client_addr;
-  addrin = (const struct sockaddr_in *) client_addr;
-  addrin6 = (const struct sockaddr_in6 *) client_addr;
-
-  if (AF_INET == client_addr->sa_family) {
-    ip_addr = malloc(INET_ADDRSTRLEN+1);
-    if(!inet_ntop(addrin->sin_family, &(addrin->sin_addr), ip_addr , sizeof(struct sockaddr_in6))) {
-      return NULL;
-    }
-  } else if (AF_INET6 == client_addr->sa_family) {
-    ip_addr = malloc(INET6_ADDRSTRLEN+1);
-    if(!inet_ntop(addrin6->sin6_family, &(addrin6->sin6_addr), ip_addr , sizeof(struct sockaddr_in6))){
-      return NULL;
-    }
-  } else {
-    return NULL;
-  }
-
 
   LOCK_CLIENT_LIST();
   client = client_list_add_client(ip_addr);

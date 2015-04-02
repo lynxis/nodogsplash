@@ -230,7 +230,7 @@ int send_error(struct MHD_Connection *connection, int error)
   const char *page_500 = "<html><head><title>Error 500</title></head><body><h1>Error 500 - Internal Server Error. Oh no!</body></html>";
   const char *page_501 = "<html><head><title>Error 501</title></head><body><h1>Error 501 - Not Implemented</h1></body></html>";
 
-  int ret;
+  int ret = MHD_NO;
 
   switch (error)
   {

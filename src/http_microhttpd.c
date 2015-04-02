@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <linux/limits.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "client_list.h"
 #include "conf.h"
@@ -17,18 +20,60 @@ static t_client *add_client(const char *ip_addr);
 static int preauthenticated(struct MHD_Connection *connection, const char *ip_addr, const char *mac, const char *url, t_client *client);
 static int authenticated(struct MHD_Connection *connection, const char *ip_addr, const char *mac, const char *url, t_client *client);
 static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-static int serve_file(struct MHD_Connection *connection, t_client *client);
+static int serve_file(struct MHD_Connection *connection, t_client *client, const char *url);
 static int show_splashpage(struct MHD_Connection *connection, t_client *client);
-static int show_redirect(struct MHD_Connection *connection, t_client *client, const char *host, const char *url);
+static int redirect_to_splashpage(struct MHD_Connection *connection, t_client *client, const char *host, const char *url);
 static int send_error(struct MHD_Connection *connection, int error);
 static int send_redirect_temp(struct MHD_Connection *connection, const char *url);
 static int need_a_redirect(struct MHD_Connection *connection, const char *host);
+static int is_splashpage(const char *host, const char *url);
+static int get_query(struct MHD_Connection *connection, char **collect_query);
 
 
 static int need_a_redirect(struct MHD_Connection *connection, const char *host) {
-  if (host)
-    return 1;
+  char our_host[24];
+  s_config *config = config_get_config();
+  snprintf(our_host, 24, "%s:%u", config->gw_address, config->gw_port);
+
+  /* we serve all request without a host entry as well we serve all request going to our gw_address */
+  if (host == NULL || !strcmp(host, our_host))
+    return 0;
+
   return 1;
+}
+
+static int is_splashpage(const char *host, const char *url) {
+  char our_host[24];
+  s_config *config = config_get_config();
+  snprintf(our_host, 24, "%s:%u", config->gw_address, config->gw_port);
+
+  if (host == NULL) {
+    /* no hostname given
+     * '/' -> splash
+     * ''  -> splash [is this even possible with MHD?
+     */
+    if (strlen(url) == 0 ||
+        !strcmp("/", url)) {
+      return 1;
+    }
+  } else {
+    /* hostname give - check if it's our hostname */
+
+    if (strcmp(host, our_host)) {
+      /* hostname isn't ours */
+      return 0;
+    }
+
+    /* '/' -> splash
+     * ''  -> splash
+     */
+    if (strlen(url) == 0 ||
+        !strcmp("/", url)) {
+      return 1;
+    }
+  }
+  /* doesnt hit one of our rules - this isn't the splashpage */
+  return 0;
 }
 
 /**
@@ -162,24 +207,32 @@ static int preauthenticated(struct MHD_Connection *connection,
     return authenticated(connection, ip_addr, mac, url, client);
   }
   /* we check here if we have to serve this request or we redirect it. */
-  if(host == NULL || need_a_redirect(connection, host))
+  if(need_a_redirect(connection, host))
+    return redirect_to_splashpage(connection, client, host, url);
+  else if(is_splashpage(host, url)) {
     return show_splashpage(connection, client);
-  else
-    return show_redirect(connection, client, host, url);
+  } else {
+    return serve_file(connection, client, url);
+  }
 }
 
-static int show_redirect(struct MHD_Connection *connection, t_client *client, const char *host, const char *url) {
-  char *redirecturl;
-  char *query = "?";
+static int redirect_to_splashpage(struct MHD_Connection *connection, t_client *client, const char *host, const char *url) {
+  char *originurl = NULL;
+  char *splashpageurl = NULL;
+  char *query = NULL;
   int ret;
+  s_config *config = config_get_config();
 
-  if (config_get_config()->redirectURL)
-    redirecturl = safe_strdup(config_get_config()->redirectURL);
-  else
-    safe_asprintf(&redirecturl, "http://%s%s%s%s", host, url, query);
+  get_query(connection, &query);
 
-  ret = send_redirect_temp(connection, redirecturl);
-  free(redirecturl);
+//  if (config_get_config()->redirectURL)
+//    redirecturl = safe_strdup(config_get_config()->redirectURL);
+//  else
+  safe_asprintf(&originurl, "http://%s%s%s", host, url, query);
+  safe_asprintf(&splashpageurl, "http://%s:%u%s%s", config->gw_address , config->gw_port, url, query);
+
+  ret = send_redirect_temp(connection, splashpageurl);
+  free(splashpageurl);
   return ret;
 }
 
@@ -218,7 +271,56 @@ int send_redirect_temp(struct MHD_Connection *connection, const char *url) {
   return ret;
 }
 
-int send_error(struct MHD_Connection *connection, int error)
+struct collect_query {
+  int i;
+  char **elements;
+};
+
+static int collect_query_string(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
+  /* what happens when '?=foo' supplied? */
+  struct collect_query *collect_query = cls;
+  if (key && !value) {
+    collect_query->elements[collect_query->i] = safe_strdup(key);
+  } else if(key && value) {
+    safe_asprintf(&(collect_query->elements[collect_query->i]), "%s=%s", key, value);
+  }
+  collect_query->i++;
+  return MHD_YES;
+}
+static int counter_iterator(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
+  return MHD_YES;
+}
+
+static int get_query(struct MHD_Connection *connection, char **query) {
+  int element_counter;
+  char **elements;
+  struct collect_query collect_query;
+  int i;
+
+  element_counter = MHD_get_connection_values(connection, MHD_GET_ARGUMENT_KIND, counter_iterator, NULL);
+  if (element_counter == 0) {
+    *query = safe_strdup("");
+    return 0;
+  }
+  elements = calloc(element_counter, sizeof(char *));
+  collect_query.i = 0;
+  collect_query.elements = elements;
+
+//  static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
+  MHD_get_connection_values(connection, MHD_GET_ARGUMENT_KIND, collect_query_string, &collect_query);
+
+  for(i=0; i<element_counter;i++) {
+    if(!elements[i])
+      continue;
+    printf("Elements %s", elements[i]);
+    free(elements[i]);
+  }
+  free(elements);
+  *query = safe_strdup("");
+  return 0;
+}
+
+static int send_error(struct MHD_Connection *connection, int error)
 {
   struct MHD_Response *response = NULL;
   // cannot automate since cannot translate automagically between error number and MHD's status codes -- and cannot rely on MHD_HTTP_ values to provide an upper bound for an array
@@ -278,7 +380,7 @@ static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const cha
     return MHD_NO;
   }
 
-  if (strncmp("Host", key, strlen("Host"))) {
+  if (!strcmp("Host", key)) {
     *host = safe_strdup(value);
     return MHD_NO;
   }
@@ -303,6 +405,25 @@ static int show_splashpage(struct MHD_Connection *connection, t_client *client) 
   /* generate splashpage from template */
   /* send it to client */
 }
+/**
+ * @brief return an extension like `csv` if file = '/bar/foobar.csv'.
+ * @param filename
+ * @return a pointer within file is returned. NULL can be returned as well as
+ */
+const char *get_extension(const char *filename) {
+  int pos = strlen(filename);
+  while(pos > 0) {
+    pos--;
+    switch (filename[pos]) {
+    case '/':
+      return NULL;
+    case '.':
+      return (filename+pos+1);
+    }
+  }
+
+  return NULL;
+}
 
 /**
  * @brief general_file_handler try to serve a request via filesystem
@@ -310,11 +431,26 @@ static int show_splashpage(struct MHD_Connection *connection, t_client *client) 
  * @param client
  * @return
  */
-static int serve_file(struct MHD_Connection *connection, t_client *client) {
+static int serve_file(struct MHD_Connection *connection, t_client *client, const char *url) {
   s_config *config = config_get_config();
-  // config->pagesdir
-  /* check if file exists */
+  struct MHD_Response *response;
+  char filename[PATH_MAX];
+  int ret = MHD_NO;
+  size_t size;
+
+  snprintf(filename, PATH_MAX, "%s/%s", config->webroot, url);
+
+  int fd = open(filename, O_RDONLY);
+  if (fd < 0)
+    return send_error(connection, 503);
+
+  size = lseek(fd, 0, SEEK_END);
+  response = MHD_create_response_from_fd(size, fd);
+  ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+
+  MHD_destroy_response(response);
+
   /* match file against mime type */
   /* serve the file */
-  return MHD_NO;
+  return ret;
 }

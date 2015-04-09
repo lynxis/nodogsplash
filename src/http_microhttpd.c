@@ -1,3 +1,22 @@
+/********************************************************************\
+ * This program is free software; you can redistribute it and/or    *
+ * modify it under the terms of the GNU General Public License as   *
+ * published by the Free:Software Foundation; either version 2 of   *
+ * the License, or (at your option) any later version.              *
+ *                                                                  *
+ * This program is distributed in the hope that it will be useful,  *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of   *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the    *
+ * GNU General Public License for more details.                     *
+\********************************************************************/
+
+/** @internal
+ * @file http_microhttpd.c
+ * @brief a httpd implementation using libmicrohttpd
+ * @author Copyright (C) 2015 Alexander Couzens <lynxis@fe80.eu>
+ */
+
+
 #include <microhttpd.h>
 #include <syslog.h>
 #include <arpa/inet.h>

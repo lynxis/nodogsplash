@@ -14,6 +14,7 @@
 #include "firewall.h"
 #include "auth.h"
 #include "http_microhttpd.h"
+#include "http_microhttpd_utils.h"
 #include "safe.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
@@ -208,6 +209,7 @@ static int preauthenticated(struct MHD_Connection *connection,
   if(!strncmp(url, "/accept", strlen("/accept"))) {
     return authenticated(connection, ip_addr, mac, url, client);
   }
+
   /* we check here if we have to serve this request or we redirect it. */
   if(need_a_redirect(connection, host))
     return redirect_to_splashpage(connection, client, host, url);
@@ -218,10 +220,19 @@ static int preauthenticated(struct MHD_Connection *connection,
   }
 }
 
+/**
+ * @brief redirect the client to the splash page
+ * @param connection
+ * @param client
+ * @param host
+ * @param url
+ * @return
+ */
 static int redirect_to_splashpage(struct MHD_Connection *connection, t_client *client, const char *host, const char *url) {
   char *originurl = NULL;
   char *splashpageurl = NULL;
   char *query = NULL;
+  char encoded[2048];
   int ret;
   s_config *config = config_get_config();
 
@@ -230,8 +241,15 @@ static int redirect_to_splashpage(struct MHD_Connection *connection, t_client *c
 //  if (config_get_config()->redirectURL)
 //    redirecturl = safe_strdup(config_get_config()->redirectURL);
 //  else
-  safe_asprintf(&originurl, "http://%s%s%s", host, url, query);
-  safe_asprintf(&splashpageurl, "http://%s:%u%s%s", config->gw_address , config->gw_port, url, query);
+  safe_asprintf(&originurl, "http://%s%s%s%s", host, url, strlen(query) ? "?" : "" , query);
+  if (uh_urlencode(encoded, 2048, originurl, strlen(originurl)) == -1) {
+    debug(LOG_WARNING, "could not encode url");
+    // TODO: error handle urlencode
+  }
+
+  safe_asprintf(&splashpageurl, "http://%s:%u%s?q=%s", config->gw_address , config->gw_port, "/splash.html", encoded);
+  debug(LOG_WARNING, "originurl: %s", originurl);
+  debug(LOG_WARNING, "splashpageurl: %s", splashpageurl);
 
   ret = send_redirect_temp(connection, splashpageurl);
   free(splashpageurl);
@@ -266,6 +284,7 @@ int send_redirect_temp(struct MHD_Connection *connection, const char *url) {
 
   response = MHD_create_response_from_data(strlen(redirect), redirect, MHD_YES, MHD_NO);
   MHD_add_response_header(response, "Location", url);
+
   ret = MHD_queue_response(connection, MHD_HTTP_TEMPORARY_REDIRECT, response);
 
   MHD_destroy_response(response);
@@ -298,6 +317,8 @@ static int get_query(struct MHD_Connection *connection, char **query) {
   char **elements;
   struct collect_query collect_query;
   int i;
+  int j;
+  int length = 0;
 
   element_counter = MHD_get_connection_values(connection, MHD_GET_ARGUMENT_KIND, counter_iterator, NULL);
   if (element_counter == 0) {
@@ -314,11 +335,23 @@ static int get_query(struct MHD_Connection *connection, char **query) {
   for(i=0; i<element_counter;i++) {
     if(!elements[i])
       continue;
-    printf("Elements %s", elements[i]);
+    length += strlen(elements[i]);
+
+    if(i >0) /* q=foo&o=bar the '&' need also some space */
+      length++;
+  }
+
+  /* don't miss the zero terminator */
+  *query = calloc(1, length+1);
+
+  for(i=0, j=0; i<element_counter;i++) {
+    if(!elements[i])
+      continue;
+    strncpy(*query + j, elements[i], length-j);
     free(elements[i]);
   }
+
   free(elements);
-  *query = safe_strdup("");
   return 0;
 }
 

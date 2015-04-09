@@ -329,6 +329,8 @@ static int send_error(struct MHD_Connection *connection, int error)
   const char *page_404 = "<html><head><title>Error 404</title></head><body><h1>Error 404 - Not Found</h1></body></html>";
   const char *page_500 = "<html><head><title>Error 500</title></head><body><h1>Error 500 - Internal Server Error. Oh no!</body></html>";
   const char *page_501 = "<html><head><title>Error 501</title></head><body><h1>Error 501 - Not Implemented</h1></body></html>";
+  const char *page_503 = "<html><head><title>Error 503</title></head><body><h1>Error 503 - Internal Server Error</h1></body></html>";
+
 
   int ret = MHD_NO;
 
@@ -357,6 +359,10 @@ static int send_error(struct MHD_Connection *connection, int error)
   case 501:
     response = MHD_create_response_from_data(strlen(page_501), (char *)page_501, MHD_NO, MHD_NO);
     ret = MHD_queue_response(connection, MHD_HTTP_NOT_IMPLEMENTED, response);
+    break;
+  case 503:
+    response = MHD_create_response_from_data(strlen(page_503), (char *)page_503, MHD_NO, MHD_NO);
+    ret = MHD_queue_response(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
     break;
   }
 

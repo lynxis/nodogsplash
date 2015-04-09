@@ -16,6 +16,8 @@
 #include "http_microhttpd.h"
 #include "safe.h"
 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
 static t_client *add_client(const char *ip_addr);
 static int preauthenticated(struct MHD_Connection *connection, const char *ip_addr, const char *mac, const char *url, t_client *client);
 static int authenticated(struct MHD_Connection *connection, const char *ip_addr, const char *mac, const char *url, t_client *client);
@@ -431,8 +433,53 @@ const char *get_extension(const char *filename) {
   return NULL;
 }
 
+struct mime_type {
+  const char *mimetype;
+  const char *extension;
+};
+
+
+#define DEFAULT_MIME_TYPE "application/octet-stream"
+
+static const struct mime_type mime_types[] = {
+{"text/css", "css"},
+{"text/html", "htm"},
+{"text/html", "html"},
+
+{"application/javascript", "js"},
+
+{"image/gif", "gif"},
+{"image/jpeg", "jpg"},
+{"image/jpeg", "jpeg"},
+{"image/png", "png"},
+{"image/svg", "svg"},
+{"image/svg", "svgz"},
+{"image/x-icon", "ico"},
+};
+
+const char *lookup_mimetype(const char *filename) {
+  int i;
+  const char *extension;
+
+  if(!filename) {
+    return NULL;
+  }
+
+  extension = get_extension(filename);
+  if(!extension)
+    return DEFAULT_MIME_TYPE;
+
+  for(i=0; i< ARRAY_SIZE(mime_types); i++) {
+    if(strcmp(extension, mime_types[i].extension) == 0) {
+      return mime_types[i].mimetype;
+    }
+  }
+
+  return DEFAULT_MIME_TYPE;
+}
+
 /**
- * @brief general_file_handler try to serve a request via filesystem
+ * @brief serve_file try to serve a request via filesystem. Using webroot as root.
  * @param connection
  * @param client
  * @return
@@ -442,6 +489,7 @@ static int serve_file(struct MHD_Connection *connection, t_client *client, const
   struct MHD_Response *response;
   char filename[PATH_MAX];
   int ret = MHD_NO;
+  const char *mimetype = NULL;
   size_t size;
 
   snprintf(filename, PATH_MAX, "%s/%s", config->webroot, url);
@@ -450,13 +498,14 @@ static int serve_file(struct MHD_Connection *connection, t_client *client, const
   if (fd < 0)
     return send_error(connection, 503);
 
+  mimetype = lookup_mimetype(filename);
+
+  /* serving file and creating response */
   size = lseek(fd, 0, SEEK_END);
   response = MHD_create_response_from_fd(size, fd);
+  MHD_add_response_header(response, "Content-Type", mimetype);
   ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-
   MHD_destroy_response(response);
 
-  /* match file against mime type */
-  /* serve the file */
   return ret;
 }

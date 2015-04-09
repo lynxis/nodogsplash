@@ -36,6 +36,8 @@
 #include "http_microhttpd_utils.h"
 #include "mimetypes.h"
 #include "safe.h"
+#include "template.h"
+#include "util.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -457,16 +459,43 @@ static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const cha
  * @return
  */
 static int show_splashpage(struct MHD_Connection *connection, t_client *client) {
-  const char *testsplash = "<html><body><h1>juhuuuu</h1></body></html>";
   struct MHD_Response *response;
   int ret;
+  struct templater templor;
+  const char *testsplash = "<html>$title$uptime</html>";
+  char result[1024];
+  s_config *config = config_get_config();
 
-  response = MHD_create_response_from_buffer(strlen(testsplash), (void *)testsplash, MHD_RESPMEM_PERSISTENT);
+  tmpl_init_templor(&templor);
+  tmpl_set_variable(&templor, "authaction", VERSION);
+  tmpl_set_variable(&templor, "authtarget", VERSION);
+  tmpl_set_variable(&templor, "clienip", client->ip);
+  tmpl_set_variable(&templor, "clientmac", client->mac);
+  tmpl_set_variable(&templor, "content", VERSION);
+  tmpl_set_variable(&templor, "denyaction", VERSION);
+  tmpl_set_variable(&templor, "error_msg", VERSION);
+
+  tmpl_set_variable(&templor, "gatewaymac", config->gw_mac);
+  tmpl_set_variable(&templor, "gatewayname", config->gw_name);
+
+  tmpl_set_variable(&templor, "imagesdir", config->imagesdir);
+  tmpl_set_variable(&templor, "pagedir", config->pagesdir);
+
+  tmpl_set_variable(&templor, "maxclients", VERSION);
+  tmpl_set_variable(&templor, "nclients", VERSION);
+
+  tmpl_set_variable(&templor, "redir", VERSION);
+  tmpl_set_variable(&templor, "title", "Nodogsplash");
+  tmpl_set_variable(&templor, "tok", client->token);
+  tmpl_set_variable(&templor, "uptime", get_uptime_string());
+  tmpl_set_variable(&templor, "version", VERSION);
+
+  tmpl_parse(&templor, result, 1024, testsplash, strlen(testsplash));
+  tmpl_free_templor_childs(&templor);
+
+  response = MHD_create_response_from_buffer(strlen(result), (void *)result, MHD_RESPMEM_MUST_COPY);
   ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
   return ret;
-
-  /* generate splashpage from template */
-  /* send it to client */
 }
 
 /**

@@ -15,6 +15,7 @@
 #include "auth.h"
 #include "http_microhttpd.h"
 #include "http_microhttpd_utils.h"
+#include "mimetypes.h"
 #include "safe.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
@@ -469,29 +470,7 @@ const char *get_extension(const char *filename) {
   return NULL;
 }
 
-struct mime_type {
-  const char *mimetype;
-  const char *extension;
-};
-
-
 #define DEFAULT_MIME_TYPE "application/octet-stream"
-
-static const struct mime_type mime_types[] = {
-{"text/css", "css"},
-{"text/html", "htm"},
-{"text/html", "html"},
-
-{"application/javascript", "js"},
-
-{"image/gif", "gif"},
-{"image/jpeg", "jpg"},
-{"image/jpeg", "jpeg"},
-{"image/png", "png"},
-{"image/svg", "svg"},
-{"image/svg", "svgz"},
-{"image/x-icon", "ico"},
-};
 
 const char *lookup_mimetype(const char *filename) {
   int i;
@@ -505,9 +484,9 @@ const char *lookup_mimetype(const char *filename) {
   if(!extension)
     return DEFAULT_MIME_TYPE;
 
-  for(i=0; i< ARRAY_SIZE(mime_types); i++) {
-    if(strcmp(extension, mime_types[i].extension) == 0) {
-      return mime_types[i].mimetype;
+  for(i=0; i< ARRAY_SIZE(uh_mime_types); i++) {
+    if(strcmp(extension, uh_mime_types[i].extn) == 0) {
+      return uh_mime_types[i].mime;
     }
   }
 

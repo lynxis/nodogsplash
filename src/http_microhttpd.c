@@ -496,7 +496,7 @@ static int serve_file(struct MHD_Connection *connection, t_client *client, const
 
   int fd = open(filename, O_RDONLY);
   if (fd < 0)
-    return send_error(connection, 503);
+    return send_error(connection, 404);
 
   mimetype = lookup_mimetype(filename);
 

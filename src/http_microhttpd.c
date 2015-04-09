@@ -308,6 +308,8 @@ static int collect_query_string(void *cls, enum MHD_ValueKind kind, const char *
   collect_query->i++;
   return MHD_YES;
 }
+
+/* a dump iterator required for counting all elements */
 static int counter_iterator(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
   return MHD_YES;
 }
@@ -429,7 +431,7 @@ static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const cha
   return MHD_YES;
 }
 /**
- * @brief show_splashpage will be called when the client clicked on Ok as well when the client haven't know us yet.
+ * @brief show_splashpage is called when the client clicked on Ok as well when the client doesn't know us yet.
  * @param connection
  * @param client
  * @return
@@ -446,6 +448,7 @@ static int show_splashpage(struct MHD_Connection *connection, t_client *client) 
   /* generate splashpage from template */
   /* send it to client */
 }
+
 /**
  * @brief return an extension like `csv` if file = '/bar/foobar.csv'.
  * @param filename

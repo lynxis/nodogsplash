@@ -41,6 +41,9 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
+/* how much memory we reserve for extending template variables */
+#define TMPLVAR_SIZE 4096
+
 static t_client *add_client(const char *ip_addr);
 static int preauthenticated(struct MHD_Connection *connection, const char *ip_addr, const char *mac, const char *url, t_client *client);
 static int authenticated(struct MHD_Connection *connection, const char *ip_addr, const char *mac, const char *url, t_client *client);
@@ -53,6 +56,7 @@ static int send_redirect_temp(struct MHD_Connection *connection, const char *url
 static int need_a_redirect(struct MHD_Connection *connection, const char *host);
 static int is_splashpage(const char *host, const char *url);
 static int get_query(struct MHD_Connection *connection, char **collect_query);
+static const char *lookup_mimetype(const char *filename);
 
 
 static int need_a_redirect(struct MHD_Connection *connection, const char *host) {
@@ -465,16 +469,46 @@ static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const cha
  */
 static int show_splashpage(struct MHD_Connection *connection, t_client *client) {
   struct MHD_Response *response;
-  int ret;
   struct templater templor;
-  const char *testsplash = "<html>$title$uptime</html>";
-  char result[1024];
   s_config *config = config_get_config();
+  int ret = -1;
+  char filename[PATH_MAX];
+  const char *mimetype;
+  int size = 0, bytes = 0;
+  int splashpage_fd;
+  char *splashpage_result;
+  char *splashpage_tmpl;
+
+  snprintf(filename, PATH_MAX, "%s/%s",config->webroot ,config->splashpage);
+
+  splashpage_fd = open(filename, O_RDONLY);
+  if (splashpage_fd < 0)
+    return send_error(connection, 404);
+
+  mimetype = lookup_mimetype(filename);
+
+  /* input size */
+  size = lseek(splashpage_fd, 0, SEEK_END);
+  lseek(splashpage_fd, 0, SEEK_SET);
+
+  /* we TMPLVAR_SIZE for template variables */
+  splashpage_tmpl = calloc(1, size);
+  splashpage_result = calloc(1, size + TMPLVAR_SIZE);
+
+  while (bytes < size) {
+    ret = read(splashpage_fd, splashpage_tmpl+bytes, size-bytes);
+    if (ret < 0) {
+      free(splashpage_result);
+      free(splashpage_tmpl);
+      return send_error(connection, 503);
+    }
+    bytes += ret;
+  }
 
   tmpl_init_templor(&templor);
   tmpl_set_variable(&templor, "authaction", VERSION);
   tmpl_set_variable(&templor, "authtarget", VERSION);
-  tmpl_set_variable(&templor, "clienip", client->ip);
+  tmpl_set_variable(&templor, "clientip", client->ip);
   tmpl_set_variable(&templor, "clientmac", client->mac);
   tmpl_set_variable(&templor, "content", VERSION);
   tmpl_set_variable(&templor, "denyaction", VERSION);
@@ -495,11 +529,18 @@ static int show_splashpage(struct MHD_Connection *connection, t_client *client) 
   tmpl_set_variable(&templor, "uptime", get_uptime_string());
   tmpl_set_variable(&templor, "version", VERSION);
 
-  tmpl_parse(&templor, result, 1024, testsplash, strlen(testsplash));
+  tmpl_parse(&templor, splashpage_result, size + TMPLVAR_SIZE, splashpage_tmpl, size);
   tmpl_free_templor_childs(&templor);
+  free(splashpage_tmpl);
 
-  response = MHD_create_response_from_buffer(strlen(result), (void *)result, MHD_RESPMEM_MUST_COPY);
+  response = MHD_create_response_from_buffer(strlen(splashpage_result), (void *)splashpage_result, MHD_RESPMEM_MUST_FREE);
+  if (!response)
+    return send_error(connection, 503);
+
+  MHD_add_response_header(response, "Content-Type", mimetype);
   ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+  MHD_destroy_response(response);
+
   return ret;
 }
 

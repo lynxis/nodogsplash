@@ -314,6 +314,9 @@ int send_redirect_temp(struct MHD_Connection *connection, const char *url) {
   safe_asprintf(&redirect, redirect_body, url);
 
   response = MHD_create_response_from_data(strlen(redirect), redirect, MHD_YES, MHD_NO);
+  if (!response)
+    return send_error(connection, 503);
+
   MHD_add_response_header(response, "Location", url);
 
   ret = MHD_queue_response(connection, MHD_HTTP_TEMPORARY_REDIRECT, response);
@@ -612,6 +615,9 @@ static int serve_file(struct MHD_Connection *connection, t_client *client, const
   /* serving file and creating response */
   size = lseek(fd, 0, SEEK_END);
   response = MHD_create_response_from_fd(size, fd);
+  if (!response)
+    return send_error(connection, 503);
+
   MHD_add_response_header(response, "Content-Type", mimetype);
   ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
   MHD_destroy_response(response);

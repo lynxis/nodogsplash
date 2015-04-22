@@ -96,6 +96,11 @@ static int is_splashpage(const char *host, const char *url) {
         !strcmp("/", url)) {
       return 1;
     }
+
+    if (strlen(url) > 0 &&
+        !strcmp(config->splashpage, url+1)) {
+      return 1;
+    }
   }
   /* doesnt hit one of our rules - this isn't the splashpage */
   return 0;

@@ -1,6 +1,6 @@
 
 CC?=gcc
-CFLAGS?=-O2
+CFLAGS?=-O0 -g -Wall
 CFLAGS+=-Isrc
 #CFLAGS+=-Wall -Wwrite-strings -pedantic -std=gnu99
 LDFLAGS+=-pthread -lmicrohttpd

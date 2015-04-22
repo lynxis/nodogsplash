@@ -527,7 +527,6 @@ static int show_splashpage(struct MHD_Connection *connection, t_client *client) 
   tmpl_set_variable(&templor, "nclients", VERSION);
 
   tmpl_set_variable(&templor, "redir", VERSION);
-  tmpl_set_variable(&templor, "title", "Nodogsplash");
   tmpl_set_variable(&templor, "tok", client->token);
   tmpl_set_variable(&templor, "uptime", get_uptime_string());
   tmpl_set_variable(&templor, "version", VERSION);

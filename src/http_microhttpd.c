@@ -359,6 +359,26 @@ struct collect_query {
   char **elements;
 };
 
+static int collect_redirect_url(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
+  const char **redirect_url = cls;
+
+  if (!redirect_url)
+    return MHD_NO;
+
+  *redirect_url = NULL;
+
+  if (!key || !value) {
+    return MHD_YES;
+  }
+
+  if (!strcmp(key, "redir")) {
+    *redirect_url = value;
+    /* stop execution of iterator */
+    return MHD_NO;
+  }
+  return MHD_YES;
+}
+
 static int collect_query_string(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
   /* what happens when '?=foo' supplied? */
   struct collect_query *collect_query = cls;
@@ -374,6 +394,30 @@ static int collect_query_string(void *cls, enum MHD_ValueKind kind, const char *
 /* a dump iterator required for counting all elements */
 static int counter_iterator(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
   return MHD_YES;
+}
+
+/**
+ * @brief get_url_from_query
+ * @param connection
+ * @param redirect_url as plaintext - not url encoded
+ * @param redirect_url_len
+ * @return 0 or -1 on error
+ */
+static int get_redirect_url(struct MHD_Connection *connection,
+                              char *redirect_url,
+                              size_t redirect_url_len) {
+  const char *query_url = NULL;
+
+  if (!redirect_url || redirect_url_len == 0)
+    return -1;
+
+  MHD_get_connection_values(connection, MHD_GET_ARGUMENT_KIND, &collect_redirect_url, &query_url);
+
+  if (!query_url)
+    return -1;
+
+  strncpy(redirect_url, query_url, redirect_url_len);
+  return 0;
 }
 
 static int get_query(struct MHD_Connection *connection, char **query) {

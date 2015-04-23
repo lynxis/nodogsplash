@@ -580,32 +580,61 @@ static int show_splashpage(struct MHD_Connection *connection, t_client *client) 
     bytes += ret;
   }
 
+  char *uptime = get_uptime_string();
+  char *nclients = NULL;
+  char *maxclients = NULL;
+  char *denyaction = NULL;
+  char *authaction = NULL;
+  char *authtarget = NULL;
+  char redirect_url[2048];
+  char redirect_url_encoded[2048];
+  char *imagesdir = NULL;
+  char *pagesdir = NULL;
+  memset(redirect_url, 0, sizeof(redirect_url));
+  memset(redirect_url_encoded, 0, sizeof(redirect_url_encoded));
+  get_redirect_url(connection, redirect_url, sizeof(redirect_url));
+  uh_urlencode(redirect_url_encoded, sizeof(redirect_url_encoded), redirect_url, strlen(redirect_url));
+
+  safe_asprintf(&nclients, "%d", get_client_list_length());
+  safe_asprintf(&maxclients, "%d", config->maxclients);
+  safe_asprintf(&denyaction, "http://%s:%d/%s/", config->gw_address, config->gw_port, config->denydir);
+  safe_asprintf(&authaction, "http://%s:%d/%s/", config->gw_address, config->gw_port, config->authdir);
+  safe_asprintf(&authtarget, "http://%s:%d/%s/?token=%s&redir=%s", config->gw_address, config->gw_port, config->authdir, client->token, redirect_url_encoded);
+  safe_asprintf(&authaction, "http://%s:%d/%s/", config->gw_address, config->gw_port, config->authdir);
+  safe_asprintf(&pagesdir, "/%s", config->pagesdir);
+  safe_asprintf(&imagesdir, "/%s", config->imagesdir);
+
   tmpl_init_templor(&templor);
-  tmpl_set_variable(&templor, "authaction", VERSION);
-  tmpl_set_variable(&templor, "authtarget", VERSION);
+  tmpl_set_variable(&templor, "authaction", authaction);
+  tmpl_set_variable(&templor, "authtarget", authtarget);
   tmpl_set_variable(&templor, "clientip", client->ip);
   tmpl_set_variable(&templor, "clientmac", client->mac);
-  tmpl_set_variable(&templor, "content", VERSION);
-  tmpl_set_variable(&templor, "denyaction", VERSION);
-  tmpl_set_variable(&templor, "error_msg", VERSION);
+//  tmpl_set_variable(&templor, "content", VERSION);
+  tmpl_set_variable(&templor, "denyaction", denyaction);
+  tmpl_set_variable(&templor, "error_msg", "");
 
   tmpl_set_variable(&templor, "gatewaymac", config->gw_mac);
   tmpl_set_variable(&templor, "gatewayname", config->gw_name);
 
-  tmpl_set_variable(&templor, "imagesdir", config->imagesdir);
-  tmpl_set_variable(&templor, "pagedir", config->pagesdir);
+  tmpl_set_variable(&templor, "imagesdir", imagesdir);
+  tmpl_set_variable(&templor, "pagesdir", pagesdir);
 
-  tmpl_set_variable(&templor, "maxclients", VERSION);
-  tmpl_set_variable(&templor, "nclients", VERSION);
+  tmpl_set_variable(&templor, "maxclients", maxclients);
+  tmpl_set_variable(&templor, "nclients", nclients);
 
-  tmpl_set_variable(&templor, "redir", VERSION);
+  tmpl_set_variable(&templor, "redir", redirect_url);
   tmpl_set_variable(&templor, "tok", client->token);
-  tmpl_set_variable(&templor, "uptime", get_uptime_string());
+  tmpl_set_variable(&templor, "uptime", uptime);
   tmpl_set_variable(&templor, "version", VERSION);
 
   tmpl_parse(&templor, splashpage_result, size + TMPLVAR_SIZE, splashpage_tmpl, size);
-  tmpl_free_templor_childs(&templor);
+  free(authaction);
+  free(denyaction);
+  free(maxclients);
+  free(nclients);
+  free(uptime);
   free(splashpage_tmpl);
+  free(imagesdir);
 
   response = MHD_create_response_from_buffer(strlen(splashpage_result), (void *)splashpage_result, MHD_RESPMEM_MUST_FREE);
   if (!response)

@@ -9,7 +9,7 @@
 extern const char *variable_names[18];
 
 struct templater {
-  char *variables[18]; /* must have the same size of variable_names */
+  const char *variables[18]; /* must have the same size of variable_names */
 };
 
 /**

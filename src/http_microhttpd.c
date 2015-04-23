@@ -64,6 +64,7 @@ static int need_a_redirect(struct MHD_Connection *connection, const char *host) 
   s_config *config = config_get_config();
   snprintf(our_host, 24, "%s:%u", config->gw_address, config->gw_port);
 
+  /* TODO: port 80 is special, because the hostname doesn't need a port */
   /* we serve all request without a host entry as well we serve all request going to our gw_address */
   if (host == NULL || !strcmp(host, our_host))
     return 0;
@@ -152,6 +153,18 @@ get_ip(struct MHD_Connection *connection) {
   return ip_addr;
 }
 
+/**
+ * @brief libmicrohttpd_cb called when the client do a request to this server
+ * @param cls unused
+ * @param connection - client connection
+ * @param url - which url was called
+ * @param method - POST / GET / ...
+ * @param version http 1.0 or 1.1
+ * @param upload_data - unused
+ * @param upload_data_size - unused
+ * @param ptr - unused
+ * @return
+ */
 int
 libmicrohttpd_cb(void *cls,
                   struct MHD_Connection *connection,
@@ -176,8 +189,6 @@ libmicrohttpd_cb(void *cls,
    * should all requests redirected? even those to .css, .js, ... or respond with 404/503/...
    */
 
-
-  /* check if we need to redirect this client */
   ip_addr = get_ip(connection);
   mac = arp_get(ip_addr);
 
@@ -204,19 +215,20 @@ libmicrohttpd_cb(void *cls,
  * @param connection
  * @param ip_addr - needs to be freed
  * @param mac - needs to be freed
+ * @param redirect_url - redirect the client to this url
  * @return
  */
 static int authenticated(struct MHD_Connection *connection,
                          const char *ip_addr,
                          const char *mac,
-                         const char *url,
+                         const char *redirect_url,
                          t_client *client) {
   auth_client_action(ip_addr, mac, AUTH_MAKE_AUTHENTICATED);
   return send_redirect_temp(connection, "http://www.google.com");
 }
 
 /**
- * @brief preauthenticated - called when a client is in this state.
+ * @brief preauthenticated - called for all request of a client in this state.
  * @param connection
  * @param ip_addr - needs to be freed
  * @param mac - needs to be freed
@@ -318,9 +330,7 @@ int send_redirect_temp(struct MHD_Connection *connection, const char *url) {
     return send_error(connection, 503);
 
   MHD_add_response_header(response, "Location", url);
-
   ret = MHD_queue_response(connection, MHD_HTTP_TEMPORARY_REDIRECT, response);
-
   MHD_destroy_response(response);
 
   return ret;

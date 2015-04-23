@@ -211,7 +211,24 @@ libmicrohttpd_cb(void *cls,
 }
 
 /**
- * @brief authenticated - client already authed
+ * @brief try_to_authenticate
+ * @param connection
+ * @param client
+ * @param host
+ * @param url
+ * @return
+ */
+static int try_to_authenticate(struct MHD_Connection *connection, t_client *client, const char *host, const char *url) {
+  /* a successful auth looks like
+   * http://192.168.42.1:2050/nodogsplash_auth/?redir=http%3A%2F%2Fberlin.freifunk.net%2F&tok=94c4cdd2
+   * when authaction -> http://192.168.42.1:2050/nodogsplash_auth/
+   */
+
+  return 0;
+}
+
+/**
+ * @brief authenticated the client and redirect them to his url
  * @param connection
  * @param ip_addr - needs to be freed
  * @param mac - needs to be freed
@@ -249,7 +266,8 @@ static int preauthenticated(struct MHD_Connection *connection,
 
   MHD_get_connection_values(connection, MHD_HEADER_KIND, get_host_value_callback, &host);
 
-  if(!strncmp(url, "/accept", strlen("/accept"))) {
+  /* check if this client wants to be authenticated */
+  if (try_to_authenticate(connection, client, host, url)) {
     return authenticated(connection, ip_addr, mac, url, client);
   }
 

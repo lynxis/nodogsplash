@@ -137,13 +137,6 @@ int tmpl_set_variable(struct templater *templor, const char *name, const char *v
   return 0;
 }
 
-void tmpl_free_templor_childs(struct templater *templor) {
-  int i;
-  for (i=0; i<ARRAY_SIZE(variable_names); i++)
-    if(templor->variables[i])
-      free((void *)templor->variables[i]);
-}
-
 void tmpl_init_templor(struct templater *templor) {
   if(!templor)
     return;

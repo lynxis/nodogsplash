@@ -33,12 +33,6 @@ int tmpl_parse(struct templater *templor, char *dst, size_t dst_len, const char 
 int tmpl_set_variable(struct templater *templor, const char *name, const char *value);
 
 /**
- * @brief free templors childs
- * @param templor
- */
-void tmpl_free_templor_childs(struct templater *templor);
-
-/**
  * @brief initialize templator
  * @param templor
  */

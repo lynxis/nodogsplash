@@ -224,7 +224,7 @@ static int authenticated(struct MHD_Connection *connection,
                          const char *redirect_url,
                          t_client *client) {
   auth_client_action(ip_addr, mac, AUTH_MAKE_AUTHENTICATED);
-  return send_redirect_temp(connection, "http://www.google.com");
+  return send_redirect_temp(connection, redirect_url);
 }
 
 /**

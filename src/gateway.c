@@ -218,13 +218,11 @@ init_signals(void)
 static void
 main_loop(void)
 {
-	int result;
+  int result = 0;
+  int ret_ptr = 0;
+  int ret = 0;
 	pthread_t	tid;
-	struct timespec wait_time;
-	int msec;
 	s_config *config;
-	void **params;
-	int* thread_serial_num_p;
 
 	config = config_get_config();
 
@@ -294,75 +292,15 @@ main_loop(void)
 	result = pthread_create(&tid, NULL, thread_ndsctl, (void *)safe_strdup(config->ndsctl_sock));
 	if (result != 0) {
 		debug(LOG_ERR, "FATAL: Failed to create thread_ndsctl - exiting");
-		termination_handler(0);
-	}
-	pthread_detach(tid);
+    termination_handler(1);
+  }
 
-	/*
-	 * Enter the httpd request handling loop
-	 */
-	debug(LOG_NOTICE, "Waiting for connections");
-	created_httpd_threads = 0;
-	current_httpd_threads = 0;
-	while(1) {
-//		r = httpdGetConnection(webserver, NULL);
-
-		/* We can't convert this to a switch because there might be
-		 * values that are not -1, 0 or 1. */
-//		if (webserver->lastError == -1) {
-//			/* Interrupted system call */
-//			continue; /* continue loop from the top */
-//		} else if (webserver->lastError < -1) {
-//			/*
-//			 * FIXME
-//			 * An error occurred - should we abort?
-//			 * reboot the device ?
-//			 */
-//			debug(LOG_ERR, "FATAL: httpdGetConnection returned unexpected value %d, exiting.", webserver->lastError);
-//			termination_handler(0);
-//		} else if (r != NULL) {
-//			/*
-//			 * We got a connection
-//			 *
-//			 * We create another thread to handle the request,
-//			 * possibly sleeping first if there are too many already
-//			 */
-//			debug(LOG_DEBUG,"%d current httpd threads.", current_httpd_threads);
-//			if(config->decongest_httpd_threads && current_httpd_threads >= config->httpd_thread_threshold) {
-//				msec = current_httpd_threads * config->httpd_thread_delay_ms;
-//				wait_time.tv_sec = msec / 1000;
-//				wait_time.tv_nsec = (msec % 1000) * 1000000;
-//				debug(LOG_INFO, "Httpd thread creation delayed %ld sec %ld nanosec for congestion.",
-//					  wait_time.tv_sec, wait_time.tv_nsec);
-//				nanosleep(&wait_time,NULL);
-//			}
-//			thread_serial_num_p = (int*) malloc(sizeof(int)); /* thread_httpd() must free */
-//			pthread_mutex_lock(&httpd_mutex);
-//			*thread_serial_num_p = created_httpd_threads;
-//			created_httpd_threads++;
-//			pthread_mutex_unlock(&httpd_mutex);
-//			debug(LOG_INFO, "Creating httpd request thread %d for %s", *thread_serial_num_p, r->clientAddr);
-//			/* The void**'s are a simulation of the normal C
-//			 * function calling sequence. */
-//			params = safe_malloc(3 * sizeof(void *)); /* thread_httpd() must free */
-//			*params = webserver;
-//			*(params + 1) = r;
-//			*(params + 2) = thread_serial_num_p;
-
-//			result = pthread_create(&tid, NULL, (void *)thread_httpd, (void *)params);
-//			if (result != 0) {
-//				debug(LOG_ERR, "FATAL: pthread_create failed to create httpd request thread - exiting...");
-//				termination_handler(0);
-//			}
-//			pthread_detach(tid);
-//		} else {
-//			/* webserver->lastError should be 2 */
-//			/* XXX We failed an ACL.... No handling because
-//			 * we don't set any... */
-//		}
-	}
-
-	/* never reached */
+  result = pthread_join(tid, NULL);
+  if (result) {
+    debug(LOG_INFO, "Failed to wait for nodogsplash thread.");
+  }
+  MHD_stop_daemon(webserver);
+  termination_handler(result);
 }
 
 /** Main entry point for nodogsplash.

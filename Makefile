@@ -36,7 +36,7 @@ install:
 #ifeq(yes,$(STRIP))
 	strip nodogsplash
 	strip ndsctl
-#endif	
+#endif
 	mkdir -p $(DESTDIR)/usr/bin/
 	cp ndsctl $(DESTDIR)/usr/bin/
 	cp nodogsplash $(DESTDIR)/usr/bin/

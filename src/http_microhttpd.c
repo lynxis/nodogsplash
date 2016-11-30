@@ -877,14 +877,29 @@ const char *lookup_mimetype(const char *filename)
  */
 static int serve_file(struct MHD_Connection *connection, t_client *client, const char *url)
 {
+	struct stat stat_buf;
 	s_config *config = config_get_config();
 	struct MHD_Response *response;
 	char filename[PATH_MAX];
 	int ret = MHD_NO;
 	const char *mimetype = NULL;
-	size_t size;
+	ssize_t size;
 
 	snprintf(filename, PATH_MAX, "%s/%s", config->webroot, url);
+
+	/* check if file exists and is not a directory */
+	ret = stat(filename, &stat_buf);
+	if (ret) {
+		debug(LOG_DEBUG, "404 path %s stat ret %d", filename, ret);
+		/* stat failed */
+		return send_error(connection, 404);
+	}
+
+	if (!S_ISREG(stat_buf.st_mode)) {
+		debug(LOG_DEBUG, "404 path %s is not a regular file", filename);
+		/* ignore links */
+		return send_error(connection, 404);
+	}
 
 	int fd = open(filename, O_RDONLY);
 	if (fd < 0)

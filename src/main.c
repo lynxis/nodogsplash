@@ -247,6 +247,25 @@ main_loop(void)
 	const char *ipfmt = config->ip6 ? "[%s]:%d" : "%s:%d";
 	safe_asprintf(&config->gw_address, ipfmt, config->gw_ip, config->gw_port);
 
+	if (config->gw_domain == NULL) {
+		if (config->gw_port == 80)
+			if (config->ip6)
+				safe_asprintf(&config->gw_http_name, "[%s]", config->gw_ip);
+			else
+				safe_asprintf(&config->gw_http_name, "%s", config->gw_ip);
+		else
+			safe_asprintf(&config->gw_http_name, ipfmt, config->gw_ip, config->gw_port);
+
+		safe_asprintf(&config->gw_http_name_port, ipfmt, config->gw_ip, config->gw_port);
+	} else {
+		if (config->gw_port == 80)
+			safe_asprintf(&config->gw_http_name, "%s", config->gw_domain);
+		else
+			safe_asprintf(&config->gw_http_name, "%s:%d", config->gw_domain, config->gw_port);
+
+		safe_asprintf(&config->gw_http_name_port, "%s:%d", config->gw_domain, config->gw_port);
+	}
+
 	if ((config->gw_mac = get_iface_mac(config->gw_interface)) == NULL) {
 		debug(LOG_ERR, "Could not get MAC address information of %s, exiting...", config->gw_interface);
 		exit(1);
@@ -266,7 +285,7 @@ main_loop(void)
 		exit(1);
 	}
 	/* TODO: set listening socket */
-	debug(LOG_NOTICE, "Created web server on %s", config->gw_address);
+	debug(LOG_NOTICE, "Created web server on %s", config->gw_http_name);
 	/*
 		httpdAddCContent(webserver, "/", "", 0, NULL, http_nodogsplash_callback_index);
 		httpdAddCWildcardContent(webserver, config->authdir, NULL, http_nodogsplash_callback_auth);

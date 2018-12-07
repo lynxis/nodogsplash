@@ -69,6 +69,7 @@ typedef enum {
 	oDebugLevel,
 	oMaxClients,
 	oGatewayName,
+	oGatewayDomainName,
 	oGatewayInterface,
 	oGatewayIPRange,
 	oGatewayIP,
@@ -123,6 +124,7 @@ static const struct {
 	{ "debuglevel", oDebugLevel },
 	{ "maxclients", oMaxClients },
 	{ "gatewayname", oGatewayName },
+	{ "gatewaydomainname", oGatewayDomainName },
 	{ "gatewayinterface", oGatewayInterface },
 	{ "gatewayiprange", oGatewayIPRange },
 	{ "gatewayip", oGatewayIP },
@@ -202,6 +204,7 @@ config_init(void)
 	config.gw_interface = NULL;
 	config.gw_iprange = safe_strdup(DEFAULT_GATEWAY_IPRANGE);
 	config.gw_address = NULL;
+	config.gw_domain = NULL;
 	config.gw_ip = NULL;
 	config.gw_port = DEFAULT_GATEWAYPORT;
 	config.fas_port = DEFAULT_FASPORT;
@@ -746,6 +749,9 @@ config_read(const char *filename)
 			break;
 		case oGatewayName:
 			config.gw_name = safe_strdup(p1);
+			break;
+		case oGatewayDomainName:
+			config.gw_domain = safe_strdup(p1);
 			break;
 		case oGatewayInterface:
 			config.gw_interface = safe_strdup(p1);

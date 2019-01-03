@@ -11,5 +11,5 @@ git checkout "$1"
 
 cd /srv/nodogsplash/tests
 
-ip addr add 192.168.55.2/24 dev vnet0
+ip addr add 192.168.55.2/24 dev eth0
 ip route add default via 192.168.55.1

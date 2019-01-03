@@ -16,7 +16,7 @@ make clean
 make
 make install
 
-ip addr 192.168.250.2/24 dev eth0
+ip addr add 192.168.250.2/24 dev eth0
 ip route add default via 192.168.250.1
 
-ip addr 192.168.55.1/24 dev eth1
+ip addr add 192.168.55.1/24 dev eth1

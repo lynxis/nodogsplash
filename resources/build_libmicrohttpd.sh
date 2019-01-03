@@ -21,7 +21,7 @@ if [ -n "$2" ] ; then
 fi
 
 if [ -z "$MHD_VERSION" ] ; then
-	export MHD_VERSION="0.9.51"
+	export MHD_VERSION="0.9.60"
 fi
 unset CFLAGS
 rm -rf /tmp/libmicrohttpd*

@@ -3,6 +3,7 @@
 # prepare_server.sh: <GIT_REV> [<MHD_VERSION>]
 
 set -e
+set -x
 
 # checkout the repo
 cd /srv

@@ -139,7 +139,7 @@ def generate_test_file():
         f.write(output)
         f.close()
 
-def testing(server_rev):
+def testing(server_rev, mhd_version=None):
     context = get_random_context()
     print("generate a run for %s" % context)
     client, server = prepare_containers(context, server_rev)
@@ -151,7 +151,7 @@ def testing(server_rev):
         raise RuntimeError('nodogsplash client can not connect to the server')
     run_tests(server, client)
 
-def prepare(cont_type, name, revision, bridge, ip_netmask='172.16.16.1/24'):
+def prepare(cont_type, name, revision, bridge, ip_netmask='172.16.16.1/24', mhd_version=None):
     if cont_type not in ['server', 'client']:
         raise RuntimeError('Unknown container type given')
     if lxc.Container(name).defined:
@@ -184,6 +184,10 @@ def prepare(cont_type, name, revision, bridge, ip_netmask='172.16.16.1/24'):
                 % cont.name)
 
     script = '/testing/prepare_%s.sh' % cont_type
+    arguments = [script, revision]
+
+    if mhd_version:
+        arguments.append(mhd_version)
     LOG.info("Server %s run %s", name, script)
     ret = cont.attach_wait(lxc.attach_run_command, [script, revision])
     if ret != 0:
@@ -191,7 +195,7 @@ def prepare(cont_type, name, revision, bridge, ip_netmask='172.16.16.1/24'):
     LOG.info("Finished prepare_server %s", name)
     return cont
 
-def prepare_containers(context, server_rev):
+def prepare_containers(context, server_rev, mhd_version=None):
     """ this does the real test.
     - cloning containers from nodogsplash-base
     - setup network
@@ -207,8 +211,8 @@ def prepare_containers(context, server_rev):
     bridge_name = "br-%s" % context
 
     create_bridge(bridge_name)
-    server = prepare('server', server_name, server_rev, bridge_name, '172.16.16.1/24')
-    client = prepare('client', client_name, server_rev, bridge_name, '172.16.16.100/24')
+    server = prepare('server', server_name, server_rev, bridge_name, '172.16.16.1/24', mhd_version)
+    client = prepare('client', client_name, server_rev, bridge_name, '172.16.16.100/24', mhd_version)
 
     return client, server
 
@@ -324,6 +328,8 @@ if __name__ == '__main__':
     # clean up
     parser.add_argument('--clean', action='store_true', default=False,
             help="Clean up (old) containers and bridges. This will kill all running tests!")
+    parser.add_argument('--mhd', dest='mhd_version', default=None,
+            help="Set the version of the libmicrohttpd.")
 
     args = parser.parse_args()
 
@@ -339,7 +345,7 @@ if __name__ == '__main__':
     if args.test:
         if not args.server:
             raise RuntimeError("No server revision given. E.g. --test --server aba123.")
-        testing(args.server)
+        testing(args.server, args.mhd_version)
 
     if args.clean:
         clean_up()

@@ -337,7 +337,7 @@ if __name__ == '__main__':
         setup_template()
 
     if args.test:
-        if not args.server or not args.client:
+        if not args.server:
             raise RuntimeError("No server revision given. E.g. --test --server aba123.")
         testing(args.server)
 

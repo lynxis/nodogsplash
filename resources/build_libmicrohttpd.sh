@@ -10,10 +10,14 @@
 # exit immediately if a command exits with a non-zero status.
 set -e
 
-if [ $# -ne 1 -o "$1" != "--compile"  ] ; then
+if [ "$1" != "--compile"  ] ; then
 	echo "This script is intended for test systems. See source code for more information." >&2
 	echo "$# $1"
 	exit 1
+fi
+
+if [ -n "$2" ] ; then
+	export MHD_VERSION="$2"
 fi
 
 if [ -z "$MHD_VERSION" ] ; then

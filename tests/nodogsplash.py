@@ -12,7 +12,7 @@ import signal
 import sys
 from threading import Timer
 
-GIT_URL = "https://github.com/wlanslovenija/tunneldigger"
+GIT_URL = "https://github.com/nodogsplash/nodogsplash"
 
 LOG = logging.getLogger("test.nodogsplash")
 
@@ -148,7 +148,7 @@ def testing(server_rev):
 
     # wait until client is connected to server
     if not check_ping(client, '192.168.254.1', 20):
-        raise RuntimeError('Tunneldigger client can not connect to the server')
+        raise RuntimeError('nodogsplash client can not connect to the server')
     run_tests(server, client)
 
 def prepare(cont_type, name, revision, bridge, ip_netmask='172.16.16.1/24'):
@@ -157,12 +157,12 @@ def prepare(cont_type, name, revision, bridge, ip_netmask='172.16.16.1/24'):
     if lxc.Container(name).defined:
         raise RuntimeError('Container "%s" already exist!' % name)
 
-    base = lxc.Container("tunneldigger-base")
+    base = lxc.Container("nodogsplash-base")
 
     if not base.defined:
         raise RuntimeError("Setup first the base container")
 
-    base = lxc.Container("tunneldigger-base")
+    base = lxc.Container("nodogsplash-base")
     if base.running:
         raise RuntimeError(
             "base container %s is still running."
@@ -193,7 +193,7 @@ def prepare(cont_type, name, revision, bridge, ip_netmask='172.16.16.1/24'):
 
 def prepare_containers(context, server_rev):
     """ this does the real test.
-    - cloning containers from tunneldigger-base
+    - cloning containers from nodogsplash-base
     - setup network
     - checkout git repos
     - execute "compiler" steps
@@ -310,7 +310,7 @@ def check_if_git_contains(container, repo_path, top_commit, search_for_commit):
     return False
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Test Tunneldigger version against each other")
+    parser = argparse.ArgumentParser(description="Test nodogsplash version against each other")
     # operation on the hosts
     parser.add_argument('--check-host', dest='check_host', action='store_true', default=False,
             help="Check if the host has all requirements installed")

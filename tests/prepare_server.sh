@@ -12,6 +12,7 @@ git checkout "$1"
 
 ./resources/build_libmicrohttpd.sh --compile "$2"
 
+export CFLAGS="-I/tmp/libmicrohttpd_install/include" LDFLAGS="-L/tmp/libmicrohttpd_install/lib"
 make clean
 make
 make install

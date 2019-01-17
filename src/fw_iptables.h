@@ -52,6 +52,8 @@ extern unsigned int  FW_MARK_BLOCKED;          /**< @brief The client is blocked
 extern unsigned int  FW_MARK_TRUSTED;          /**< @brief The client is trusted */
 extern unsigned int  FW_MARK_MASK;             /**< @brief Iptables mask: bitwise or of the others */
 
+/** @brief firewall thread function */
+void *thread_firewall(void *arg);
 
 /** @brief Initialize the firewall */
 int iptables_fw_init(void);
@@ -89,5 +91,7 @@ int iptables_unallow_mac(const char mac[]);
 
 int iptables_trust_mac(const char mac[]);
 int iptables_untrust_mac(const char mac[]);
+
+void iptables_fw_init_queue(void);
 
 #endif /* _IPTABLES_H_ */

@@ -75,6 +75,8 @@
  */
 static pthread_t tid_client_check = 0;
 
+static pthread_t tid_firewall = 0;
+
 /* The internal web server */
 struct MHD_Daemon * webserver = NULL;
 
@@ -298,6 +300,8 @@ main_loop(void)
 		debug(LOG_NOTICE, "Binauth Script is %s\n", config->binauth);
 	}
 
+	iptables_fw_init_queue();
+
 	/* Reset the firewall (cleans it, in case we are restarting after nodogsplash crash) */
 	iptables_fw_destroy();
 
@@ -317,6 +321,13 @@ main_loop(void)
 		termination_handler(0);
 	}
 	pthread_detach(tid_client_check);
+
+	/* Start firewall thread */
+	result = pthread_create(&tid_firewall, NULL, thread_firewall, NULL);
+	if (result != 0) {
+		debug(LOG_ERR, "FATAL: Failed to create thread_firewall - exiting");
+		termination_handler(1);
+	}
 
 	/* Start control thread */
 	result = pthread_create(&tid, NULL, thread_ndsctl, (void *)(config->ndsctl_sock));

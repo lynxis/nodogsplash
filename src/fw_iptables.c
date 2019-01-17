@@ -49,6 +49,7 @@
 #include "debug.h"
 #include "util.h"
 #include "tc.h"
+#include "queue.h"
 
 // iptables v1.4.17
 #define MIN_IPTABLES_VERSION (1 * 10000 + 4 * 100 + 17)
@@ -66,6 +67,8 @@ unsigned int FW_MARK_MASK;             /**< @brief Iptables mask: bitwise or of 
 
 extern pthread_mutex_t client_list_mutex;
 extern pthread_mutex_t config_mutex;
+
+static struct queue fwqueue;
 
 /**
  * Make nonzero to supress the error output of the firewall during destruction.
@@ -172,44 +175,54 @@ _iptables_check_mark_masking()
 	return 0;
 }
 
+void *
+thread_firewall(void *arg) {
+	int i, rc;
+	char *command;
+	char *iptables;
+	s_config *config;
+
+	config = config_get_config();
+
+	iptables = config->ip6 ? "ip6tables" : "iptables";
+
+
+	while (true) {
+		if (dequeue(&fwqueue, (void **) &command) != 0)
+			continue;
+
+		for (i = 0; i < 5; i++) {
+			if (fw_quiet) {
+				rc = execute("%s --wait %s > /dev/null 2>&1", iptables, command);
+			} else {
+				rc = execute("%s --wait %s", iptables, command);
+			}
+
+			if (rc == 4) {
+				/* iptables error code 4 indicates a resource problem that might
+				 * be temporary. So we retry to insert the rule a few times. (Mitar) */
+				sleep(1);
+			} else {
+				break;
+			}
+		}
+	}
+}
+
 /** @internal */
 int
 iptables_do_command(const char *format, ...)
 {
 	va_list vlist;
 	char *fmt_cmd = NULL;
-	s_config *config;
-	char *iptables;
-	int rc;
-	int i;
 
 	va_start(vlist, format);
 	safe_vasprintf(&fmt_cmd, format, vlist);
 	va_end(vlist);
 
-	config = config_get_config();
+	enqueue(&fwqueue, fmt_cmd);
 
-	iptables = config->ip6 ? "ip6tables" : "iptables";
-
-	for (i = 0; i < 5; i++) {
-		if (fw_quiet) {
-			rc = execute("%s --wait %s > /dev/null 2>&1", iptables, fmt_cmd);
-		} else {
-			rc = execute("%s --wait %s", iptables, fmt_cmd);
-		}
-
-		if (rc == 4) {
-			/* iptables error code 4 indicates a resource problem that might
-			 * be temporary. So we retry to insert the rule a few times. (Mitar) */
-			sleep(1);
-		} else {
-			break;
-		}
-	}
-
-	free(fmt_cmd);
-
-	return rc;
+	return 0;
 }
 
 /**
@@ -1075,4 +1088,8 @@ iptables_fw_counters_update(void)
 	pclose(output);
 
 	return 0;
+}
+
+void iptables_fw_init_queue(void) {
+	queue_init(&fwqueue);
 }

@@ -12,7 +12,6 @@ git checkout "$1"
 cd /srv/nodogsplash/tests
 
 # eth0 -> internet (autoconf by lxc)
-# eth1 -> client
+# eth1 -> httpd
 ip addr flush dev eth0
-ip addr add 192.168.55.2/24 dev eth1
-ip route add 192.168.250.0/24 via 192.168.55.1
+ip addr add 192.168.250.1/24 dev eth1

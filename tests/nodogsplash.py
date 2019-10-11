@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from trepan.api import debug
 import lxc
 from random import randint
 from subprocess import check_call, check_output
@@ -23,8 +24,8 @@ def setup_template():
     container = lxc.Container("nodogsplash-base")
 
     if not container.defined:
-        if not container.create("download", lxc.LXC_CREATE_QUIET, {"dist": "ubuntu",
-                                                                   "release": "trusty",
+        if not container.create("download", lxc.LXC_CREATE_QUIET, {"dist": "debian",
+                                                                   "release": "buster",
                                                                    "arch": "amd64"}):
             raise RuntimeError("failed to create container")
 
@@ -39,7 +40,6 @@ def setup_template():
 
     # nodogsplash requirements
     pkg_to_install = [
-        "iproute",
         "bridge-utils",
         "libnetfilter-conntrack3",
         "python-dev",
@@ -68,6 +68,7 @@ def setup_template():
         "lighttpd"
         ]
 
+    container.attach_wait(lxc.attach_run_command, ["apt-get", "update"])
     container.attach_wait(lxc.attach_run_command, ["apt-get", "install", "-y"] + pkg_to_install)
     container.shutdown(30)
 
@@ -151,14 +152,22 @@ def testing(server_rev, mhd_version=None):
         raise RuntimeError('nodogsplash client can not connect to the server')
     run_tests(server, client)
 
-def prepare(cont_type, name, revision, bridge, ip_netmask='172.16.16.1/24', mhd_version=None):
-    if cont_type not in ['server', 'client']:
+def prepare(cont_type, context, prepare_args=[]):
+    # create new containers and prepare them to be used in the test case
+    # 
+    # cont_type: one of httpd, nds, client
+    # context: a random generated context to ensure bridges/container names etc. are unique
+    # prepare_args: command line argument given to the prepare script. e.g. `prepare_nds.sh $args`
+
+    # e.g. httpd-baf14114
+    name = "%s-%s" % (context, cont_type)
+
+    if cont_type not in ['httpd', 'nds', 'client']:
         raise RuntimeError('Unknown container type given')
     if lxc.Container(name).defined:
         raise RuntimeError('Container "%s" already exist!' % name)
 
     base = lxc.Container("nodogsplash-base")
-
     if not base.defined:
         raise RuntimeError("Setup first the base container")
 
@@ -169,14 +178,49 @@ def prepare(cont_type, name, revision, bridge, ip_netmask='172.16.16.1/24', mhd_
             "Please run lxc-stop --name %s -t 5" %
             (base.name, base.name))
 
-    LOG.info("Cloning base (%s) to server (%s)", base.name, name)
+    LOG.info("Cloning base (%s) to %s (%s)", base.name, cont_type, name)
     cont = base.clone(name, None, lxc.LXC_CLONE_SNAPSHOT, bdevtype='aufs')
     if not cont:
         raise RuntimeError('could not create container "%s"' % name)
-    configure_network(cont, bridge, ip_netmask)
+
+    cont.append_config_item('lxc.logfile', '/tmp/output.log')
+
+    # network configuration
+    # - all container also have another interface to the internet
+    #
+    #   -------
+    #   |httpd|
+    #   -------
+    #      | --- 192.168.250.0/24
+    #   -------
+    #   | nds |
+    #   -------
+    #      | --- 192.168.55.0/24
+    #   --------
+    #   |client|
+    #   --------
+
+    httpd = 'http-%s' % context
+    httpd_net = '192.168.250.0'
+    client = 'cli-%s' % context
+    client_net = '192.168.55.0'
+
+    create_bridge(httpd)
+    create_bridge(client)
+    
+    if cont_type == 'httpd':
+        configure_network(cont, httpd, httpd_net)
+    elif cont_type == 'nds':
+        configure_network(cont, httpd, httpd_net)
+        configure_network(cont, client, client_net)
+    elif cont_type == 'client':
+        configure_network(cont, client, client_net)
 
     configure_mounts(cont)
+    sleep(10)
     if not cont.start():
+        print("Container is defined? %s" % cont.defined)
+        debug()
         raise RuntimeError("Can not start container %s" % cont.name)
     sleep(3)
     if not check_ping(cont, 'google-public-dns-a.google.com', 20):
@@ -184,18 +228,17 @@ def prepare(cont_type, name, revision, bridge, ip_netmask='172.16.16.1/24', mhd_
                 % cont.name)
 
     script = '/testing/prepare_%s.sh' % cont_type
-    arguments = [script, revision]
+    arguments = [script]
+    arguments.extend(prepare_args)
 
-    if mhd_version:
-        arguments.append(mhd_version)
     LOG.info("Server %s run %s", name, script)
-    ret = cont.attach_wait(lxc.attach_run_command, [script, revision])
+    ret = cont.attach_wait(lxc.attach_run_command, arguments)
     if ret != 0:
         raise RuntimeError('Failed to prepare the container "%s" type %s' % (name, cont_type))
     LOG.info("Finished prepare_server %s", name)
     return cont
 
-def prepare_containers(context, server_rev, mhd_version=None):
+def prepare_containers(context, nds_rev, mhd_version=None):
     """ this does the real test.
     - cloning containers from nodogsplash-base
     - setup network
@@ -205,16 +248,14 @@ def prepare_containers(context, server_rev, mhd_version=None):
     """
 
     generate_test_file()
+    if not mhd_version:
+        mhd_version = "last"
 
-    server_name = "%s_server" % context
-    client_name = "%s_client" % context
-    bridge_name = "br-%s" % context
+    nds = prepare('httpd', context, [nds_rev, mhd_version])
+    httpd = prepare('nds', context)
+    client = prepare('client', context)
 
-    create_bridge(bridge_name)
-    server = prepare('server', server_name, server_rev, bridge_name, '172.16.16.1/24', mhd_version)
-    client = prepare('client', client_name, server_rev, bridge_name, '172.16.16.100/24', mhd_version)
-
-    return client, server
+    return httpd, nds, client
 
 def run_server(server):
     """ run_server(server)

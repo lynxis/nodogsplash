@@ -19,7 +19,5 @@ make
 make install
 
 # eth0 -> internet (autoconf by lxc)
-# eth1 -> httpd
-# eth2 -> client
-ip addr add 192.168.250.2/24 dev eth1
-ip addr add 192.168.55.1/24 dev eth2
+# eth1 -> httpd (192.168.250.2/24)
+# eth2 -> client (192.168.55.1/24)

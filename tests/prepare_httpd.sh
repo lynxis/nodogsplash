@@ -3,15 +3,9 @@
 # fail when something fails
 set -e
 
-# checkout the repo
-cd /srv
-git clone /git_repo nodogsplash
-cd /srv/nodogsplash
-git checkout "$1"
-
-cd /srv/nodogsplash/tests
+cd /testing
 
 # eth0 -> internet (autoconf by lxc)
-# eth1 -> httpd
+# eth1 -> httpd (192.168.250.1/24)
 ip addr flush dev eth0
-ip addr add 192.168.250.1/24 dev eth1
+ip route add 192.168.55.0/24 via 192.168.250.2

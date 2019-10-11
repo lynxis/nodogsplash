@@ -2,6 +2,7 @@
 
 from trepan.api import debug
 import lxc
+import re
 from random import randint
 from subprocess import check_call, check_output
 from time import sleep
@@ -78,7 +79,7 @@ def get_random_context():
     context = hex(context)[2:]
     return context
 
-def configure_network(container, bridge, ip_netmask):
+def configure_network(container, bridge, ip_netmask, gateway=None):
     """ configure the container and connect them to the bridge
     container is a lxc container
     bridge the name of your bridge to attach the container
@@ -89,6 +90,9 @@ def configure_network(container, bridge, ip_netmask):
         ('lxc.network.flags', 'up'),
         ('lxc.network.ipv4', ip_netmask),
     ]
+
+    if gateway:
+        config += [('lxc.network.gateway', gateway)]
 
     for item in config:
         container.append_config_item(item[0], item[1])
@@ -108,12 +112,21 @@ def configure_mounts(container):
 
 def create_bridge(name):
     """ setup a linux bridge device """
-    LOG.info("Creating bridg %s", name)
-    check_call(["brctl", "addbr", name], timeout=10)
+    try:
+        os.stat('/sys/class/net/%s' % name)
+    except FileNotFoundError:
+        LOG.info("Creating bridge %s", name)
+        check_call(["brctl", "addbr", name], timeout=10)
+
     check_call(["ip", "link", "set", name, "up"], timeout=10)
 
     # FIXME: lxc_container: confile.c: network_netdev: 474 no network device defined for 'lxc.network.1.link' = 'br-46723922' option
     sleep(3)
+
+def remove_bridge(name):
+    LOG.info("Destroy bridge %s", name)
+    check_call(["ip", "link", "set", name, "down"], timeout=10)
+    check_call(["brctl", "delbr", name], timeout=10)
 
 def check_ping(container, server, tries):
     """ check the internet connectivity inside the container """
@@ -143,14 +156,16 @@ def generate_test_file():
 def testing(server_rev, mhd_version=None):
     context = get_random_context()
     print("generate a run for %s" % context)
-    client, server = prepare_containers(context, server_rev)
-    spid = run_server(server)
-    cpid = run_client(client, ['-b', '172.16.16.1:8942'])
+    httpd, nds, client = prepare_containers(context, server_rev, mhd_version)
 
     # wait until client is connected to server
-    if not check_ping(client, '192.168.254.1', 20):
-        raise RuntimeError('nodogsplash client can not connect to the server')
-    run_tests(server, client)
+    if not check_ping(client, '192.168.250.1', 20):
+        raise RuntimeError('Client can not ping 192.168.250.1. Check the container network')
+
+    npid = run_script(nds, 'nds')
+    hpid = run_script(httpd, 'httpd')
+    cpid = run_script(client, 'client')
+    run_tests(nds, client)
 
 def prepare(cont_type, context, prepare_args=[]):
     # create new containers and prepare them to be used in the test case
@@ -200,36 +215,34 @@ def prepare(cont_type, context, prepare_args=[]):
     #   |client|
     #   --------
 
-    httpd = 'http-%s' % context
-    httpd_net = '192.168.250.0'
-    client = 'cli-%s' % context
-    client_net = '192.168.55.0'
+    httpd = '%s-http' % context
+    client = '%s-cli' % context
 
     create_bridge(httpd)
     create_bridge(client)
-    
+
     if cont_type == 'httpd':
-        configure_network(cont, httpd, httpd_net)
+        configure_network(cont, httpd, '192.168.250.1/24')
     elif cont_type == 'nds':
-        configure_network(cont, httpd, httpd_net)
-        configure_network(cont, client, client_net)
+        configure_network(cont, httpd, '192.168.250.2/24')
+        configure_network(cont, client, '192.168.55.1/24')
     elif cont_type == 'client':
-        configure_network(cont, client, client_net)
+        configure_network(cont, client, '192.168.55.2/24')
 
     configure_mounts(cont)
     sleep(10)
     if not cont.start():
         print("Container is defined? %s" % cont.defined)
-        debug()
         raise RuntimeError("Can not start container %s" % cont.name)
     sleep(3)
     if not check_ping(cont, 'google-public-dns-a.google.com', 20):
+        debug()
         raise RuntimeError("Container doesn't have an internet connection %s"
                 % cont.name)
 
     script = '/testing/prepare_%s.sh' % cont_type
     arguments = [script]
-    arguments.extend(prepare_args)
+    arguments += prepare_args
 
     LOG.info("Server %s run %s", name, script)
     ret = cont.attach_wait(lxc.attach_run_command, arguments)
@@ -248,32 +261,21 @@ def prepare_containers(context, nds_rev, mhd_version=None):
     """
 
     generate_test_file()
-    if not mhd_version:
-        mhd_version = "last"
+    nds_args = [nds_rev]
+    if mhd_version:
+        nds_args += [mhd_version]
 
-    nds = prepare('httpd', context, [nds_rev, mhd_version])
-    httpd = prepare('nds', context)
+    nds = prepare('nds', context, nds_args)
+    httpd = prepare('httpd', context)
     client = prepare('client', context)
 
     return httpd, nds, client
 
-def run_server(server):
-    """ run_server(server)
-    server is a container
-    """
-    spid = server.attach(lxc.attach_run_command, ['/testing/run_server.sh'])
-    return spid
-
-def run_client(client, client_arguments):
-    """ run_client(client)
-    client is a container
-    arguments must contains at least one server in the format ['-b', 'localhost:8942']
-    """
-
-    arguments = ['/testing/run_client.sh']
-    arguments.extend(client_arguments)
-    cpid = client.attach(lxc.attach_run_command, arguments)
-    return cpid
+def run_script(container, cont_type, arguments=[]):
+    _arguments = ['/testing/run_%s.sh' % cont_type]
+    _arguments += arguments
+    pid = container.attach(lxc.attach_run_command, _arguments)
+    return pid
 
 def run_tests(server, client):
     """ the client should be already connect to the server """
@@ -282,23 +284,25 @@ def run_tests(server, client):
     if ret != 0:
         raise RuntimeError("failed to run the tests")
 
-def clean_up(context, client, server):
+def clean_up():
     """ clean the up all bridge and containers created by this scripts. It will also abort all running tests."""
-    LOG.info("ctx %s clean up", context)
-    # stop containers
-    for cont in [client, server]:
+    rex = re.compile(r'([a-f0-9]{8})-(httpd|nds|client)')
+    for container in lxc.list_containers():
+        if not rex.match(container):
+            continue
+
+        cont = lxc.Container(container)
         if cont.running:
-            LOG.debug("ctx %s hardstop container %s", context, cont.name)
+            LOG.debug("hardstop container %s",cont.name)
             cont.shutdown(0)
-        LOG.debug("ctx %s destroy container %s", context, cont.name)
+        LOG.debug("destroy container %s", cont.name)
         cont.destroy()
 
-    # remove bridge
-    bridge_name = 'br-%s' % context
-    if os.path.exists('/sys/devices/virtual/net/%s' % bridge_name):
-        LOG.info("ctx %s destroy bridge %s", context, bridge_name)
-        check_call(["ip", "link", "set", bridge_name, "down"], timeout=10)
-        check_call(["brctl", "delbr", bridge_name], timeout=10)
+    rex = re.compile(r'([a-f0-9]{8})-(http|cli)')
+    for device in os.listdir('/sys/devices/virtual/net/'):
+        if not rex.match(device):
+            continue
+        remove_bridge(device)
 
 def check_host():
     """ check if the host has all known requirements to run this script """
@@ -373,6 +377,8 @@ if __name__ == '__main__':
             help="Set the version of the libmicrohttpd.")
 
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.DEBUG)
 
     if not args.check_host and not args.setup and not args.test and not args.clean:
       parser.print_help()

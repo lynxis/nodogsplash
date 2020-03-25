@@ -59,8 +59,7 @@ static int get_host_value_callback(void *cls, enum MHD_ValueKind kind, const cha
 static int serve_file(struct MHD_Connection *connection, t_client *client, const char *url);
 static int show_splashpage(struct MHD_Connection *connection, t_client *client);
 static int show_statuspage(struct MHD_Connection *connection, t_client *client);
-static int show_preauthpage(struct MHD_Connection *connection, const char *query);
-static int encode_and_redirect_to_splashpage(struct MHD_Connection *connection, const char *originurl, const char *querystr);
+static int encode_and_redirect_to_splashpage(struct MHD_Connection *connection, const char *originurl);
 static int redirect_to_splashpage(struct MHD_Connection *connection, t_client *client, const char *host, const char *url);
 static int send_error(struct MHD_Connection *connection, int error);
 static int send_redirect_temp(struct MHD_Connection *connection, const char *url);
@@ -70,56 +69,6 @@ static int is_splashpage(const char *host, const char *url);
 static int get_query(struct MHD_Connection *connection, char **collect_query, const char *separator);
 static const char *get_redirect_url(struct MHD_Connection *connection);
 static const char *lookup_mimetype(const char *filename);
-
-
-/* Get client settings from binauth */
-static int do_binauth(struct MHD_Connection *connection, const char *binauth, t_client *client,
-	int *seconds_ret, int *upload_ret, int *download_ret)
-{
-	char username_enc[64] = {0};
-	char password_enc[64] = {0};
-	const char *username;
-	const char *password;
-	char msg[255] = {0};
-	int seconds;
-	int upload;
-	int download;
-	int rc;
-
-	username = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "username");
-	password = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "password");
-
-	if ((username && uh_urlencode(username_enc, sizeof(username_enc), username, strlen(username)) == -1)
-		|| (password && uh_urlencode(password_enc, sizeof(password_enc), password, strlen(password)) == -1)) {
-		debug(LOG_ERR, "Failed to encode username and password for binauth");
-		return -1;
-	}
-
-	rc = execute_ret(msg, sizeof(msg) - 1, "%s auth_client %s '%s' '%s'",
-		binauth, client->mac, username_enc, password_enc);
-
-	if (rc != 0) {
-		return -1;
-	}
-
-	rc = sscanf(msg, "%d %d %d", &seconds, &upload, &download);
-
-	// store assigned parameters
-	switch (rc) {
-		case 3:
-			*download_ret = MAX(download, 0);
-		case 2:
-			*upload_ret = MAX(upload, 0);
-		case 1:
-			*seconds_ret = MAX(seconds, 0);
-		case 0:
-			break;
-		default:
-			return -1;
-	}
-
-	return 0;
-}
 
 struct collect_query {
 	int i;
@@ -432,22 +381,8 @@ static int authenticate_client(struct MHD_Connection *connection,
 	int upload = 0;
 	int download = 0;
 	int rc;
-	char *query_str = NULL;
-	int ret;
 
-	if (config->binauth) {
-		rc = do_binauth(connection, config->binauth, client, &seconds, &upload, &download);
-		if (rc != 0) {
-			safe_asprintf(&query_str, "?clientip=%s&gatewayname=%s&tok=%s", client->ip, config->gw_name, client->token);
-			ret = encode_and_redirect_to_splashpage(connection, redirect_url, query_str);
-			free(query_str);
-			return ret;
-		}
-		rc = auth_client_auth(client->id, "client_auth");
-	} else {
-		rc = auth_client_auth(client->id, NULL);
-	}
-
+	rc = auth_client_auth(client->id, NULL);
 	if (rc != 0) {
 		return send_error(connection, 503);
 	}
@@ -494,8 +429,6 @@ static int authenticated(struct MHD_Connection *connection,
 	s_config *config = config_get_config();
 	const char *host = NULL;
 	char redirect_to_us[128];
-	char *fasurl = NULL;
-	int ret;
 
 	MHD_get_connection_values(connection, MHD_HEADER_KIND, get_host_value_callback, &host);
 
@@ -513,79 +446,15 @@ static int authenticated(struct MHD_Connection *connection,
 	}
 
 	if (check_authdir_match(url, config->authdir)) {
-		if (config->fas_port && !config->preauth) {
-			safe_asprintf(&fasurl, "http://%s:%u%s?clientip=%s&gatewayname=%s&status=authenticated",
-				config->fas_remoteip, config->fas_port, config->fas_path, client->ip, config->gw_name);
-			ret = send_redirect_temp(connection, fasurl);
-			free(fasurl);
-			return ret;
-		} else if (config->fas_port && config->preauth) {
-			safe_asprintf(&fasurl, "?clientip=%s%sgatewayname=%s%sstatus=authenticated",
-				client->ip, QUERYSEPARATOR, config->gw_name, QUERYSEPARATOR);
-			ret = show_preauthpage(connection, fasurl);
-			free(fasurl);
-			return ret;	
-		} else {
-			return show_statuspage(connection, client);
-		}
+		return show_statuspage(connection, client);
 	}
 
 	if (check_authdir_match(url, config->preauthdir)) {
-		if (config->fas_port) {
-			safe_asprintf(&fasurl, "?clientip=%s&gatewayname=%s&status=authenticated",
-				client->ip, config->gw_name);
-			ret = show_preauthpage(connection, fasurl);
-			free(fasurl);
-			return ret;
-		} else {
-			return show_statuspage(connection, client);
-		}
+		return show_statuspage(connection, client);
 	}
 
 	/* user doesn't want the splashpage or tried to auth itself */
 	return serve_file(connection, client, url);
-}
-
-/**
- * @brief show_preauthpage - run preauth script and serve output.
- */
-static int show_preauthpage(struct MHD_Connection *connection, const char *query)
-{
-	char msg[HTMLMAXSIZE] = {0};
-	// Encoded querystring could be up to 3 times the size of unencoded version
-	char query_enc[QUERYMAXLEN * 3] = {0};
-	int rc;
-	struct MHD_Response *response;
-	int ret;
-	s_config *config = config_get_config();
-
-	if (query) {
-		if (uh_urlencode(query_enc, sizeof(query_enc), query, strlen(query)) == -1) {
-			debug(LOG_WARNING, "could not encode query");
-			return -1;
-		} else {
-			debug(LOG_DEBUG, "query: %s", query);
-		}
-	}
-
-	rc = execute_ret(msg, HTMLMAXSIZE - 1, "%s '%s'", config->preauth, query_enc);
-
-	if (rc != 0) {
-		debug(LOG_WARNING, "Preauth script: %s '%s' - failed to execute", config->preauth, query);
-		return -1;
-	}
-
-	// serve the script output (in msg)
-	response = MHD_create_response_from_buffer(strlen(msg), (char *)msg, MHD_RESPMEM_MUST_COPY);
-
-	if (!response) {
-		return send_error(connection, 503);
-	}
-
-	MHD_add_response_header(response, "Content-Type", "text/html");
-	ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-	MHD_destroy_response(response);
-	return ret;
 }
 
 /**
@@ -601,26 +470,10 @@ static int preauthenticated(struct MHD_Connection *connection,
 {
 	const char *host = NULL;
 	const char *redirect_url;
-	char *querystr = NULL;
-	char query_str[QUERYMAXLEN] = {0};
-	char *query = query_str;
-	char portstr[MAX_HOSTPORTLEN] = {0};
 
-	int ret;
 	s_config *config = config_get_config();
 
 	debug(LOG_DEBUG, "url: %s", url);
-
-	/* Check for preauthdir */
-	if (check_authdir_match(url, config->preauthdir)) {
-
-		debug(LOG_DEBUG, "preauthdir url detected: %s", url);
-
-		get_query(connection, &query, QUERYSEPARATOR);
-
-		ret = show_preauthpage(connection, query);
-		return ret;
-	}
 
 	MHD_get_connection_values(connection, MHD_HEADER_KIND, get_host_value_callback, &host);
 
@@ -628,25 +481,6 @@ static int preauthenticated(struct MHD_Connection *connection,
 	debug(LOG_DEBUG, "Preauthenticated - Requested url is [ %s ]", url);
 	debug(LOG_DEBUG, "Preauthenticated - Gateway Address is [ %s ]", config->gw_address);
 	debug(LOG_DEBUG, "Preauthenticated - Gateway Port is [ %u ]", config->gw_port);
-
-	/* check if this is an attempt to directly access the basic splash page when FAS is enabled  */
-	if (config->fas_port) {
-		snprintf(portstr, MAX_HOSTPORTLEN, ":%u", config->gw_port);
-
-		debug(LOG_DEBUG, "Preauthenticated - FAS is enabled");
-		debug(LOG_DEBUG, "Preauthenticated - NDS port ID is [ %s ]", portstr);
-		debug(LOG_DEBUG, "Preauthenticated - NDS port ID search result is [ %s ]", strstr(host, portstr));
-
-		if (check_authdir_match(url, config->authdir) || strstr(host, "/splash.css") == NULL) {
-			debug(LOG_DEBUG, "Preauthenticated - splash.css or authdir detected");
-		} else {
-			if (strstr(host, portstr) != NULL) {
-				debug(LOG_DEBUG, "Preauthenticated -  403 Direct Access Fobidden");
-				ret = send_error(connection, 403);
-				return ret;
-			}
-		}
-	}
 
 	/* check if this is a redirect query with a foreign host as target */
 	if (is_foreign_hosts(connection, host)) {
@@ -670,7 +504,7 @@ static int preauthenticated(struct MHD_Connection *connection,
 
 		if (!try_to_authenticate(connection, client, host, url)) {
 			/* user used an invalid token, redirect to splashpage but hold query "redir" intact */
-			return encode_and_redirect_to_splashpage(connection, redirect_url, querystr);
+			return encode_and_redirect_to_splashpage(connection, redirect_url);
 		}
 
 		return authenticate_client(connection, redirect_url, client);
@@ -691,7 +525,7 @@ static int preauthenticated(struct MHD_Connection *connection,
  * @param originurl
  * @return
  */
-static int encode_and_redirect_to_splashpage(struct MHD_Connection *connection, const char *originurl, const char *querystr)
+static int encode_and_redirect_to_splashpage(struct MHD_Connection *connection, const char *originurl)
 {
 	char *splashpageurl = NULL;
 	char encoded[QUERYMAXLEN] = {0};
@@ -708,21 +542,8 @@ static int encode_and_redirect_to_splashpage(struct MHD_Connection *connection, 
 		}
 	}
 
-	if (config->fas_port) {
-		// Generate secure query string or authaction url
-		// Note: config->fas_path contains a leading / as it is the path from the FAS web root.
-		if (config->fas_secure_enabled) {
-			safe_asprintf(&splashpageurl, "http://%s:%u%s%s&redir=%s",
-				config->fas_remoteip, config->fas_port, config->fas_path, querystr, encoded);
-		} else {
-			safe_asprintf(&splashpageurl, "http://%s:%u%s?authaction=http://%s/%s/%s&redir=%s",
-				config->fas_remoteip, config->fas_port, config->fas_path, 
-				config->gw_address, config->authdir, querystr, encoded);
-		}
-	} else {
-		safe_asprintf(&splashpageurl, "http://%s/%s?redir=%s",
+	safe_asprintf(&splashpageurl, "http://%s/%s?redir=%s",
 			config->gw_address, config->splashpage, encoded);
-	}
 
 	debug(LOG_DEBUG, "splashpageurl: %s", splashpageurl);
 
@@ -758,14 +579,9 @@ static int redirect_to_splashpage(struct MHD_Connection *connection, t_client *c
 
 	debug(LOG_DEBUG, "Query string is [ %s ]", query);
 
-	if (config->fas_secure_enabled != 1) {
-		safe_asprintf(&querystr, "?clientip=%s&gatewayname=%s&tok=%s", client->ip, config->gw_name, client->token);
-	} else {
-		safe_asprintf(&querystr, "?clientip=%s&gatewayname=%s", client->ip, config->gw_name);
-	}
-
+	safe_asprintf(&querystr, "?clientip=%s&gatewayname=%s", client->ip, config->gw_name);
 	safe_asprintf(&originurl, "http://%s%s%s", host, url, query);
-	ret = encode_and_redirect_to_splashpage(connection, originurl, querystr);
+	ret = encode_and_redirect_to_splashpage(connection, originurl);
 	free(originurl);
 	free(querystr);
 	return ret;

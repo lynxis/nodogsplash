@@ -51,25 +51,6 @@ extern pthread_mutex_t config_mutex;
 unsigned int authenticated_since_start = 0;
 
 
-static void binauth_action(t_client *client, const char *reason)
-{
-	s_config *config;
-
-	config = config_get_config();
-
-	if (config->binauth) {
-		execute("%s %s %s %llu %llu %llu %llu",
-			config->binauth,
-			reason ? reason : "unknown",
-			client->mac,
-			client->counters.incoming,
-			client->counters.outgoing,
-			client->session_start,
-			client->session_end
-		);
-	}
-}
-
 static int auth_change_state(t_client *client, const unsigned int new_state, const char *reason)
 {
 	const unsigned int state = client->fw_connection_state;
@@ -79,7 +60,6 @@ static int auth_change_state(t_client *client, const unsigned int new_state, con
 	} else if (state == FW_MARK_PREAUTHENTICATED) {
 		if (new_state == FW_MARK_AUTHENTICATED) {
 			iptables_fw_authenticate(client);
-			binauth_action(client, reason);
 		} else if (new_state == FW_MARK_BLOCKED) {
 			return -1;
 		} else if (new_state == FW_MARK_TRUSTED) {
@@ -90,7 +70,6 @@ static int auth_change_state(t_client *client, const unsigned int new_state, con
 	} else if (state == FW_MARK_AUTHENTICATED) {
 		if (new_state == FW_MARK_PREAUTHENTICATED) {
 			iptables_fw_deauthenticate(client);
-			binauth_action(client, reason);
 			client_reset(client);
 		} else if (new_state == FW_MARK_BLOCKED) {
 			return -1;

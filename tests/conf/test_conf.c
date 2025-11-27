@@ -38,6 +38,18 @@ void test_conf_minimal(void)
 	assert(config->preauth_idle_timeout == 5);
 	assert(config->auth_idle_timeout == 1440);
 	assert(config->session_timeout_block == 0);
+	assert(config->client_mode == MODE_MAC_IP);
+}
+
+void test_conf_clientlistmode(void)
+{
+	s_config *config;
+
+	reset_config();
+	config_read("clientlistmode.conf");
+	config = config_get_config();
+
+	assert(config->client_mode == MODE_MAC);
 }
 
 static int trusted_mac_list_length(void)
@@ -87,6 +99,7 @@ struct a_test {
 struct a_test tests[] = {
 	{"minimal.conf", "Test with a minimal config file", test_conf_minimal},
 	{"long_trustedlist.conf", "Test with a long TrustedMACList line (>4096 bytes)", test_conf_long_trustedlist},
+	{"clientlistmode.conf", "Test clientlistmode 1 (MAC only)", test_conf_clientlistmode},
 	{NULL, NULL, NULL},
 };
 

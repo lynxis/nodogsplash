@@ -75,7 +75,10 @@ t_client *client_list_add_client(const char mac[], const char ip[]);
 t_client *client_list_find_by_any(const char mac[], const char ip[], const char token[]);
 
 /** @brief Finds a client by its MAC and IP */
-t_client * client_list_find(const char mac[], const char ip[]);
+t_client *client_list_find(const char mac[], const char ip[]);
+
+/** @brief Finds a client and if needed, migrate the client IP */
+t_client *client_list_find_migrate(const char *mac, const char *ip);
 
 /** @brief Finds a client by its client id */
 t_client * client_list_find_by_id(const unsigned id);

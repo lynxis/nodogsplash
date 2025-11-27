@@ -353,7 +353,7 @@ libmicrohttpd_cb(void *cls,
 		return send_error(connection, 503);
 	}
 
-	client = client_list_find(mac, ip);
+	client = client_list_find_migrate(mac, ip);
 	if (!client) {
 		client = add_client(mac, ip);
 		if (!client) {

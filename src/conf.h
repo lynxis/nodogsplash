@@ -138,6 +138,16 @@ typedef struct _MAC_t {
 
 
 /**
+ * Client list mode: how clients are identified.
+ */
+enum client_mode {
+	MODE_MAC_IP = 0,
+	MODE_MAC,
+};
+
+const char *client_list_mode_str(int client_list_mode);
+
+/**
  * Configuration structure
  */
 typedef struct {
@@ -189,6 +199,7 @@ typedef struct {
 	char *binauth;			/**< @brief external authentication program */
 	char *preauth;			/**< @brief external preauthentication program */
 	char *statefile;		/**< @brief saves the client states */
+	enum client_mode client_mode;	/**< @brief define how the client list is organized */
 	bool use_nftables;
 	char *nftable_name;
 } s_config;

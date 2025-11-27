@@ -32,12 +32,14 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 
+#include <assert.h>
 #include <string.h>
 
 #include "safe.h"
 #include "debug.h"
 #include "conf.h"
 #include "client_list.h"
+#include "fw_abstract.h"
 #include "fw_common.h"
 #include "util.h"
 
@@ -254,15 +256,100 @@ client_list_find_by_any(const char mac[], const char ip[], const char token[])
 	return client;
 }
 
+static
+void
+client_migrate_ip(t_client *client, const char *new_ip)
+{
+	/* Only authenticated clients have firewall state that depends on
+	 * their IP: the per client rules (iptables, also traffic control)
+	 * or set elements (nftables) added by fw_gops.authenticate(), which
+	 * are also the source of the per client counters. These have to be
+	 * replaced and the counters carried over as offsets.
+	 *
+	 * Trusted, allowed and blocked clients are handled by MAC only rules
+	 * (iptables) or MAC sets (nftables), see fw_gops.trust_mac() and
+	 * fw_gops.block_mac(), matched against the whole gateway IP range,
+	 * and they have no per client counters. Preauthenticated clients have
+	 * no per client firewall state at all. For all of them replacing
+	 * client->ip is sufficient. */
+	if (client->fw_connection_state == FW_MARK_AUTHENTICATED) {
+		/* TODO: replace call with a much "smaller" call */
+		fw_gops.counters_update();
+
+		client->counters.incoming_offset = client->counters.incoming;
+		client->counters.outgoing_offset = client->counters.outgoing;
+
+		fw_gops.deauthenticate(client);
+
+		if (client->ip)
+			free(client->ip);
+		client->ip = safe_strdup(new_ip);
+
+		fw_gops.authenticate(client);
+	} else {
+		if (client->ip)
+			free(client->ip);
+		client->ip = safe_strdup(new_ip);
+	}
+}
+
+/** Finds a client and if needed, migrate the client IP
+ *
+ * \param mac mac address in the format 02:ca:ff:ee:ba:be
+ * \param ip IP in human readable format
+ * \return client if found or NULL
+ */
+t_client *
+client_list_find_migrate(const char *mac, const char *ip)
+{
+	s_config *config = config_get_config();
+	t_client *client = client_list_find(mac, ip);
+
+	if (!client)
+		return NULL;
+
+	/* Check if mac or ip needs to be migrated, because it changed */
+	switch (config->client_mode) {
+	case MODE_MAC_IP:
+		/* No need for migration */
+		break;
+	case MODE_MAC:
+		if (!strcmp(client->ip, ip)) {
+			break;
+		}
+		debug(LOG_INFO, "Migrating IP for Client %d (%s): old ip %s -> new ip %s",
+		      client->id, client->mac, client->ip, ip);
+
+		client_migrate_ip(client, ip);
+		break;
+	default:
+		assert(0);
+	}
+
+	return client;
+}
+
 t_client *
 client_list_find(const char mac[], const char ip[])
 {
+	s_config *config = config_get_config();
 	t_client *ptr;
 
 	ptr = firstclient;
 	while (ptr) {
-		if (!strcmp(ptr->mac, mac) && !strcmp(ptr->ip, ip)) {
-			return ptr;
+		switch (config->client_mode) {
+		case MODE_MAC_IP:
+			if (!strcmp(ptr->mac, mac) && !strcmp(ptr->ip, ip)) {
+				return ptr;
+			}
+			break;
+		case MODE_MAC:
+			if (!strcmp(ptr->mac, mac)) {
+				return ptr;
+			}
+			break;
+		default:
+			assert(0);
 		}
 		ptr = ptr->next;
 	}

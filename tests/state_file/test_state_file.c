@@ -201,7 +201,7 @@ struct a_test tests[] = {
     {"three_clients_dup_id.json", "Test invalid state file containing a duplicate id", three_clients_dup_id},
     {"three_clients_dup_ip.json", "Test valid state file containing a duplicate ip", three_clients_dup_ip},
     {"three_clients_dup_mac.json", "Test valid state file containing a duplicate mac", three_clients_dup_mac},
-    {NULL, NULL},
+    {NULL, NULL, NULL},
     };
 
 int main(int argc, char **argv)

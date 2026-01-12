@@ -79,7 +79,9 @@ int auth_change_state(t_client *client, const unsigned int new_state, const char
 	const unsigned int state = client->fw_connection_state;
 
 	if (state == new_state) {
-		return -1;
+		debug(LOG_DEBUG, "auth_change_state called with same state %s for client:", fw_common_connection_state_as_string(new_state));
+		client_list_debug(client, LOG_DEBUG);
+		return 0;
 	} else if (state == FW_MARK_PREAUTHENTICATED) {
 		if (new_state == FW_MARK_AUTHENTICATED) {
 			fw_gops.authenticate(client);

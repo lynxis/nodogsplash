@@ -291,7 +291,7 @@ auth_client_auth_nolock(const unsigned id, const char *reason)
 		authenticated_since_start++;
 	} else {
 		debug(LOG_ERR, "Client %d failed auth_change_state, client status:", id);
-		client_list_debug_print_client(client, LOG_ERR);
+		client_list_debug(client, LOG_ERR);
 	}
 
 	return rc;

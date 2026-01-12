@@ -98,8 +98,11 @@ void client_list_delete(t_client *client);
 /** @brief Flush all clients without calling any hooks or fw handlers */
 void client_list_flush(void);
 
-/** @brief Prints a client status */
-void client_list_debug_print_client(t_client *client, int level);
+/** @brief Prints summarized client status */
+void client_list_debug(t_client *client, int level);
+
+/** @brief Prints full client status */
+void client_list_debug_full(t_client *client, int level);
 
 #define LOCK_CLIENT_LIST() do { \
 	debug(LOG_DEBUG, "Locking client list"); \

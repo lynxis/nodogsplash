@@ -41,7 +41,6 @@
 #include "fw_common.h"
 #include "util.h"
 
-
 /** Client counter */
 static int client_count = 0;
 static int client_id = 1;
@@ -418,14 +417,40 @@ client_list_delete(t_client *client)
 }
 
 /**
- * @brief Prints a client status
+ * @brief Prints summarized client status
  *
  * @param client Points to the client to be printed
  */
 void
-client_list_debug_print_client(t_client *client, int level)
+client_list_debug(t_client *client, int level)
 {
-	/* client mac, IP and ID are always set */
-	debug(level, "Client ID: %d | IP: %s | MAC: %s | state: %s",
-		client->id, client->ip, client->mac, fw_common_connection_state_as_string(client->fw_connection_state));
+	debug(level, "Client ID: %d | IP: %s | MAC: %s | state: %s | token: %s",
+		client->id, client->ip, client->mac, fw_common_connection_state_as_string(client->fw_connection_state), client->token);
+}
+
+/**
+ * @brief Prints full client status
+ *
+ * @param client Points to the client to be printed
+ */
+void
+client_list_debug_full(t_client *client, int level)
+{
+	char time_session_start[64];
+	char time_session_end[64];
+	char time_counter_update[64];
+	strftime(time_session_start, 64, "%a %b %d %H:%M:%S %Y", localtime(&client->session_start));
+	strftime(time_session_end, 64, "%a %b %d %H:%M:%S %Y", localtime(&client->session_end));
+	strftime(time_counter_update, 64, "%a %b %d %H:%M:%S %Y", localtime(&client->counters.last_updated));
+	client_list_debug(client, level);
+	debug(level,
+		"Client ID: %d\n"
+		"  Session Start: %s End: %s\n"
+		"  Download Limit: %d Upload Limit: %d\n"
+		"  Traffic Counter Incoming: %ld Incoming Offset:%ld\n"
+		"  Traffic Counter Outgoing: %ld Outgoing Offset:%ld\n"
+		"  Traffic Counter last updated: %s\n",
+		client->id, time_session_start, time_session_end, client->download_limit, client->upload_limit,
+		client->counters.incoming, client->counters.incoming_offset, client->counters.outgoing,
+		client->counters.outgoing_offset, time_counter_update);
 }

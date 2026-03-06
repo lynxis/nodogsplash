@@ -112,6 +112,9 @@ void client_list_debug_print_client(t_client *client, int level);
 } while (0)
 
 extern pthread_mutex_t client_list_mutex;
-extern int client_id;
+
+#ifdef __NDS_UNIT_TEST
+int get_client_id();
+#endif /* __NDS_UNIT_TEST */
 
 #endif /* _NDS_CLIENT_LIST_H_ */

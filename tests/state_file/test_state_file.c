@@ -116,7 +116,7 @@ void one_client(void)
 {
 	assert(state_file_import("one_client.json") == 0);
 	assert(get_client_list_length() == 1);
-	assert(get_client_list_length() + 1 == client_id);
+	assert(get_client_list_length() + 1 == get_client_id());
 	t_client *client = client_get_first_client();
 	validate_client_b(client);
 }
@@ -142,7 +142,7 @@ void three_clients(void)
 	print_client_list();
 
 	assert(get_client_list_length() == 3);
-	assert(get_client_list_length() + 1 == client_id);
+	assert(get_client_list_length() + 1 == get_client_id());
 	t_client *client = client_get_first_client();
 	validate_client_a(client);
 
@@ -158,7 +158,7 @@ void three_clients_dup_id(void)
 	/* client IDs are ignored on import, resulting in 3 valid clients */
 	assert(state_file_import("three_clients_dup_id.json") == 0);
 	assert(get_client_list_length() == 3);
-	assert(get_client_list_length() + 1 == client_id);
+	assert(get_client_list_length() + 1 == get_client_id());
 	print_client_list();
 }
 
@@ -168,7 +168,7 @@ void three_clients_dup_mac(void)
 	assert(state_file_import("three_clients_dup_mac.json") == 0);
 	print_client_list();
 	assert(get_client_list_length() == 3);
-	assert(get_client_list_length() + 1 == client_id);
+	assert(get_client_list_length() + 1 == get_client_id());
 }
 
 void three_clients_dup_ip(void)
@@ -177,7 +177,7 @@ void three_clients_dup_ip(void)
 	assert(state_file_import("three_clients_dup_ip.json") == 0);
 	print_client_list();
 	assert(get_client_list_length() == 3);
-	assert(get_client_list_length() + 1 == client_id);
+	assert(get_client_list_length() + 1 == get_client_id());
 }
 
 struct a_test {

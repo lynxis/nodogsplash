@@ -229,6 +229,11 @@ ndsctl_handler(int fd)
 	memset(request, 0, sizeof(request));
 	fp = fdopen(fd, "w");
 
+	if (fp == NULL) {
+		close(fd);
+		return 2;
+	}
+
 	/* Read.... */
 	while (!done && read_bytes < (sizeof(request) - 1)) {
 		len = read(fd, request + read_bytes, sizeof(request) - read_bytes);

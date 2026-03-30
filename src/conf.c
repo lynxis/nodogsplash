@@ -171,7 +171,7 @@ static const struct {
 static void config_notnull(const void *parm, const char *parmname);
 static int parse_boolean(const char *);
 static void _parse_firewall_rule(t_firewall_ruleset *ruleset, char *leftover);
-static void parse_firewall_ruleset(const char *, FILE *, const char *, int *);
+static void parse_firewall_ruleset(char *, FILE *, const char *, int *);
 
 static OpCodes config_parse_opcode(const char *cp, const char *filename, int linenum);
 
@@ -395,7 +395,7 @@ parse_empty_ruleset_policy(char *ptr, const char *filename, int lineno)
 Parses firewall rule set information
 */
 static void
-parse_firewall_ruleset(const char *rulesetname, FILE *fd, const char *filename, int *linenum)
+parse_firewall_ruleset(char *rulesetname, FILE *fd, const char *filename, int *linenum)
 {
 	char *line = NULL, *p1, *p2;
 	size_t line_size = 0;

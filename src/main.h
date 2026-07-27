@@ -26,8 +26,12 @@
 #ifndef _NDS_MAIN_H_
 #define _NDS_MAIN_H_
 
+#include <signal.h>
 
 #define MINIMUM_STARTED_TIME 1178487900 /* 2007-05-06 */
+
+/** @brief non-zero once a thread has entered termination_handler() */
+extern volatile sig_atomic_t nds_terminating;
 
 /** @brief exits cleanly and clear the firewall rules. */
 void termination_handler(int s);

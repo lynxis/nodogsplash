@@ -38,6 +38,7 @@
 #include "fw_abstract.h"
 #include "fw_common.h"
 #include "client_list.h"
+#include "main.h"
 #include "util.h"
 
 
@@ -151,6 +152,11 @@ fw_refresh_client_list(void)
 	const int auth_idle_timeout_secs = 60 * config->auth_idle_timeout;
 	const time_t now = time(NULL);
 
+	/* Another thread is flushing the firewall */
+	if (nds_terminating) {
+		return;
+	}
+
 	/* Update all the counters */
 	if (-1 == fw_gops.counters_update()) {
 		debug(LOG_ERR, "Could not get counters from firewall!");
@@ -219,7 +225,7 @@ thread_client_timeout_check(void *arg)
 	pthread_mutex_t cond_mutex = PTHREAD_MUTEX_INITIALIZER;
 	struct timespec timeout;
 
-	while (1) {
+	while (!nds_terminating) {
 		debug(LOG_DEBUG, "Running fw_refresh_client_list()");
 
 		fw_refresh_client_list();

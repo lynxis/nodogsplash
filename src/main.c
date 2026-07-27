@@ -68,11 +68,10 @@
 #error libmicrohttp version >= 0.9.51 required
 #endif
 
-/** XXX Ugly hack
- * We need to remember the thread IDs of threads that simulate wait with pthread_cond_timedwait
- * so we can explicitly kill them in the termination handler
+/* Set as soon as a thread has entered the termination handler. Other threads
+ * poll this while waiting for the termination to be finished.
  */
-static pthread_t tid_client_check = 0;
+volatile sig_atomic_t nds_terminating = 0;
 
 /* The internal web server */
 struct MHD_Daemon * webserver = NULL;
@@ -133,11 +132,19 @@ termination_handler(int s)
 
 	/* Makes sure we only call fw_gops.fw_destroy() once. */
 	if (pthread_mutex_trylock(&sigterm_mutex)) {
-		debug(LOG_INFO, "Another thread already began global termination handler. I'm exiting");
-		pthread_exit(NULL);
-	} else {
-		debug(LOG_INFO, "Cleaning up and exiting");
+		debug(LOG_INFO, "Another thread already began global termination handler. I'm waiting for it");
+
+		/* this runs as a signal handler. Wait for the thread running the
+		 * actual signal handler here.
+		 * Do not pthread_exit() here, that would also unmap pthread_t
+		 */
+		while (1) {
+			pause();
+		}
 	}
+
+	nds_terminating = 1;
+	debug(LOG_INFO, "Cleaning up and exiting");
 
 #ifdef WITH_STATE_FILE
 	if (write_state_file) {
@@ -154,18 +161,8 @@ termination_handler(int s)
 	debug(LOG_INFO, "Flushing firewall rules...");
 	fw_gops.destroy();
 
-	/* XXX Hack
-	 * Aparently pthread_cond_timedwait under openwrt prevents signals (and therefore
-	 * termination handler) from happening so we need to explicitly kill the threads
-	 * that use that
-	 */
-	if (tid_client_check) {
-		debug(LOG_INFO, "Explicitly killing the fw_counter thread");
-		pthread_kill(tid_client_check, SIGKILL);
-	}
-
 	debug(LOG_NOTICE, "Exiting...");
-	exit(s == 0 ? 1 : 0);
+	_exit(s == 0 ? 1 : 0);
 }
 
 
@@ -231,6 +228,7 @@ main_loop(void)
 {
 	int result = 0;
 	pthread_t tid;
+	pthread_t tid_client_check;
 	s_config *config;
 
 	config = config_get_config();

@@ -36,7 +36,9 @@
  */
 typedef struct _t_counters {
 	unsigned long long incoming;	/**< @brief Incoming data total */
+	unsigned long long incoming_offset;	/**< @brief Incoming offset */
 	unsigned long long outgoing;	/**< @brief Outgoing data total */
+	unsigned long long outgoing_offset;	/**< @brief Outgoing offset */
 	time_t last_updated;	/**< @brief Last update of the counters */
 } t_counters;
 

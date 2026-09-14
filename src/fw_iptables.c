@@ -944,6 +944,7 @@ iptables_fw_counters_update(void)
 			}
 			debug(LOG_DEBUG, "Read outgoing traffic for %s: Bytes=%llu", ip, counter);
 			if ((client = client_list_find_by_ip(ip))) {
+				counter += client->counters.outgoing_offset;
 				if (client->counters.outgoing < counter) {
 					client->counters.outgoing = counter;
 					client->counters.last_updated = time(NULL);
@@ -982,6 +983,7 @@ iptables_fw_counters_update(void)
 			}
 			debug(LOG_DEBUG, "Read incoming traffic for %s: Bytes=%llu", ip, counter);
 			if ((client = client_list_find_by_ip(ip))) {
+				counter += client->counters.incoming_offset;
 				if (client->counters.incoming < counter) {
 					client->counters.incoming = counter;
 					debug(LOG_DEBUG, "%s - Updated counter.incoming to %llu bytes", ip, counter);

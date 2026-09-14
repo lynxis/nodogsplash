@@ -164,6 +164,8 @@ state_file_import_client(json_t *json_client)
 
 	JSON_GET_FIELD(client->counters.incoming, err, counters, "incoming", json_is_integer, json_integer_value);
 	JSON_GET_FIELD(client->counters.outgoing, err, counters, "outgoing", json_is_integer, json_integer_value);
+	JSON_GET_FIELD(client->counters.incoming_offset, err, counters, "incoming", json_is_integer, json_integer_value);
+	JSON_GET_FIELD(client->counters.outgoing_offset, err, counters, "outgoing", json_is_integer, json_integer_value);
 	JSON_GET_FIELD(client->counters.last_updated, err, counters, "last_updated", json_is_integer, json_integer_value);
 
 	unsigned int fw_connection_state = FW_MARK_PREAUTHENTICATED;
